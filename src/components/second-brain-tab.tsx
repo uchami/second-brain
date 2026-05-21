@@ -15,6 +15,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Button } from "@/components/ui/button";
 import { SBBucket } from "@/components/sb-bucket";
+import { LogradasSection } from "@/components/logradas-section";
 import { TaskFormDialog } from "@/components/task-form-dialog";
 import {
   cerrarSemana,
@@ -304,22 +305,13 @@ export function SecondBrainTab({
               );
             }
             return (
-              <SBBucket
+              <LogradasSection
                 key="logradas"
-                id="logradas"
-                title="Logradas"
-                subtitle={`${grouped.logradas.length} histórico`}
-                taskIds={
-                  showLogradas ? grouped.logradas.map((t) => t.id) : []
-                }
                 tasks={grouped.logradas}
                 responsables={responsables}
-                onClickTask={(t) => setEditing(t)}
-                onMoveUp={() => {}}
-                onMoveDown={() => {}}
-                collapsible
                 collapsed={!showLogradas}
                 onToggleCollapse={() => setShowLogradas((s) => !s)}
+                onClickTask={(t) => setEditing(t)}
               />
             );
           })}

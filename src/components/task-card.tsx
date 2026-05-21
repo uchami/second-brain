@@ -10,6 +10,7 @@ import {
   GripVertical,
   Rocket,
   StickyNote,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { etaColor, formatEtaShort } from "@/lib/eta";
@@ -69,7 +70,7 @@ export function TaskCard({
 }: {
   task: Task;
   responsable: Responsable | undefined;
-  context: "in-flight" | "second-brain";
+  context: "in-flight" | "second-brain" | "logradas";
   onClickTask?: () => void;
   onSendToSB?: () => void;
   showReorder?: boolean;
@@ -82,6 +83,7 @@ export function TaskCard({
 }) {
   const [pending, startTransition] = useTransition();
   const isDone = task.estado === "done";
+  const isLograda = context === "logradas";
 
   function toggleDone(next: boolean) {
     startTransition(async () => {
@@ -115,11 +117,13 @@ export function TaskCard({
       className={cn(
         "group relative flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-3 transition-shadow hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900",
         isDragging && "opacity-50",
-        isDone && "opacity-70",
+        isDone && !isLograda && "opacity-70",
+        isLograda &&
+          "border-emerald-100 bg-emerald-50/40 dark:border-emerald-950/50 dark:bg-emerald-950/10",
       )}
     >
       {/* Drag handle (desktop only) */}
-      {showReorder && (
+      {showReorder && !isLograda && (
         <button
           type="button"
           data-dnd-handle
@@ -131,12 +135,20 @@ export function TaskCard({
         </button>
       )}
 
-      <Checkbox
-        checked={isDone}
-        onCheckedChange={(c) => toggleDone(c === true)}
-        disabled={pending}
-        className="mt-0.5"
-      />
+      {isLograda ? (
+        <Trophy
+          size={18}
+          className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+          aria-label="Logrado"
+        />
+      ) : (
+        <Checkbox
+          checked={isDone}
+          onCheckedChange={(c) => toggleDone(c === true)}
+          disabled={pending}
+          className="mt-0.5"
+        />
+      )}
 
       <button
         type="button"
@@ -146,7 +158,7 @@ export function TaskCard({
         <div
           className={cn(
             "flex items-start gap-1.5 text-sm leading-snug",
-            isDone && "text-neutral-400 line-through dark:text-neutral-500",
+            isDone && !isLograda && "text-neutral-400 line-through dark:text-neutral-500",
           )}
         >
           <span className="flex-1">{task.titulo}</span>
@@ -167,14 +179,16 @@ export function TaskCard({
               {responsable.nombre}
             </span>
           )}
-          <span
-            className={cn(
-              "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-              estadoColors[task.estado],
-            )}
-          >
-            {estadoLabels[task.estado]}
-          </span>
+          {!isLograda && (
+            <span
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                estadoColors[task.estado],
+              )}
+            >
+              {estadoLabels[task.estado]}
+            </span>
+          )}
           {task.eta && !isDone && (
             <span
               className={cn(
@@ -195,7 +209,7 @@ export function TaskCard({
 
       <div className="flex shrink-0 items-center gap-0.5">
         {/* Mobile reorder buttons */}
-        {showReorder && (
+        {showReorder && !isLograda && (
           <div className="flex flex-col sm:hidden">
             <Button
               variant="ghost"
