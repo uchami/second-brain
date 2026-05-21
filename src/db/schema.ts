@@ -62,7 +62,19 @@ export const tasks = pgTable(
   ],
 );
 
+export const cierresSemana = pgTable("cierres_semana", {
+  id: serial("id").primaryKey(),
+  cerradoAt: timestamp("cerrado_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  // snapshot of active (non-done) tasks at the moment of closing,
+  // so the next "close week" preview can show the delta
+  pendientesAntes: integer("pendientes_antes").notNull(),
+  doneArchivadas: integer("done_archivadas").notNull(),
+});
+
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type Responsable = typeof responsables.$inferSelect;
 export type Estado = (typeof estadoEnum.enumValues)[number];
+export type CierreSemana = typeof cierresSemana.$inferSelect;

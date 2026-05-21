@@ -15,6 +15,13 @@
       "when": 1779327287360,
       "tag": "0001_flimsy_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779330791031,
+      "tag": "0002_numerous_nightmare",
+      "breakpoints": true
     }
   ]
 }

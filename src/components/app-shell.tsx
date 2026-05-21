@@ -33,7 +33,7 @@ export function AppShell({
   const router = useRouter();
 
   const existingBuckets = useMemo(() => {
-    const s = new Set<number>();
+    const s = new Set<number>([0, 1, 2, 3]); // permanent buckets
     for (const t of tasks) {
       if (t.bucket !== null && t.estado !== "done") s.add(t.bucket);
     }

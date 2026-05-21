@@ -21,8 +21,10 @@ import { LogradasSection } from "@/components/logradas-section";
 import { LogradaInfoDialog } from "@/components/lograda-info-dialog";
 import { TaskFormDialog } from "@/components/task-form-dialog";
 import { QuickBucketDialog } from "@/components/quick-bucket-dialog";
+import { CerrarSemanaDialog } from "@/components/cerrar-semana-dialog";
+
+const PERMANENT_BUCKETS = [0, 1, 2, 3];
 import {
-  cerrarSemana,
   moveTaskToBucketPosition,
   reorderBucket,
 } from "@/app/actions";
@@ -55,6 +57,7 @@ export function SecondBrainTab({
     null,
   );
   const [quickBucketTask, setQuickBucketTask] = useState<Task | null>(null);
+  const [cerrarSemanaOpen, setCerrarSemanaOpen] = useState(false);
   const [overBucketKey, setOverBucketKey] = useState<BucketKey | null>(null);
   const [activeBucketKey, setActiveBucketKey] = useState<BucketKey | null>(
     null,
@@ -80,6 +83,8 @@ export function SecondBrainTab({
 
     const bucketMap = new Map<number | null, Task[]>();
     bucketMap.set(null, []);
+    // Permanent buckets always present, even when empty
+    for (const n of PERMANENT_BUCKETS) bucketMap.set(n, []);
     for (const t of active) {
       const b = t.bucket;
       if (!bucketMap.has(b)) bucketMap.set(b, []);
@@ -254,26 +259,6 @@ export function SecondBrainTab({
     });
   }
 
-  function handleCerrarSemana() {
-    if (grouped.done.length === 0) {
-      toast.info("No hay tareas done que cerrar");
-      return;
-    }
-    if (
-      !confirm(
-        `Cerrar semana? ${grouped.done.length} tarea(s) pasan a Logradas`,
-      )
-    )
-      return;
-    startTransition(async () => {
-      try {
-        await cerrarSemana();
-        toast.success("Semana cerrada");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Error");
-      }
-    });
-  }
 
   return (
     <div className="space-y-4">
@@ -281,8 +266,7 @@ export function SecondBrainTab({
         <Button
           size="sm"
           variant="outline"
-          onClick={handleCerrarSemana}
-          disabled={grouped.done.length === 0}
+          onClick={() => setCerrarSemanaOpen(true)}
         >
           <CheckCheck size={14} /> Cerrar semana
         </Button>
@@ -390,6 +374,12 @@ export function SecondBrainTab({
           taskId={quickBucketTask.id}
           currentBucket={quickBucketTask.bucket}
           existingBuckets={existingBuckets}
+        />
+      )}
+      {cerrarSemanaOpen && (
+        <CerrarSemanaDialog
+          open={cerrarSemanaOpen}
+          onOpenChange={setCerrarSemanaOpen}
         />
       )}
     </div>

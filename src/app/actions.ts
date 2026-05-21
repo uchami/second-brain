@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  cierresSemana,
   responsables,
   tasks,
   type Estado,
@@ -246,13 +247,142 @@ export async function moveTaskToBucketPosition(
 
 // ---------- CERRAR SEMANA ----------
 
-export async function cerrarSemana() {
-  await db
-    .update(tasks)
-    .set({ closedWeekAt: new Date() })
-    .where(
-      and(eq(tasks.estado, "done"), isNull(tasks.closedWeekAt)),
+export type CerrarSemanaPreview = {
+  doneEstaSemana: number;
+  tareasAgregadas: number;
+  pendientesActuales: number;
+  pendientesUltimoCierre: number | null;
+  diffPctVsUltimo: number | null; // positive = more pending now (red), negative = less (green)
+  mvp: { nombre: string; count: number } | null;
+  masVieja: { titulo: string; dias: number } | null;
+  masRapida: { titulo: string; dias: number } | null;
+};
+
+export async function getCerrarSemanaPreview(): Promise<CerrarSemanaPreview> {
+  const [doneRows, pendientesRow, [ultimoCierre], allResponsables] =
+    await Promise.all([
+      db
+        .select({
+          id: tasks.id,
+          titulo: tasks.titulo,
+          responsableId: tasks.responsableId,
+          createdAt: tasks.createdAt,
+          doneAt: tasks.doneAt,
+        })
+        .from(tasks)
+        .where(and(eq(tasks.estado, "done"), isNull(tasks.closedWeekAt))),
+      db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(ne(tasks.estado, "done")),
+      db
+        .select()
+        .from(cierresSemana)
+        .orderBy(desc(cierresSemana.cerradoAt))
+        .limit(1),
+      db.select().from(responsables),
+    ]);
+
+  const pendientesActuales = pendientesRow[0]?.c ?? 0;
+  const pendientesUltimoCierre = ultimoCierre?.pendientesAntes ?? null;
+  const diffPctVsUltimo =
+    pendientesUltimoCierre !== null && pendientesUltimoCierre > 0
+      ? Math.round(
+          ((pendientesActuales - pendientesUltimoCierre) /
+            pendientesUltimoCierre) *
+            100,
+        )
+      : null;
+
+  // Tasks created since the previous cierre (or all tasks if never closed)
+  const tareasAgregadasRow = ultimoCierre
+    ? await db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(tasks)
+        .where(gt(tasks.createdAt, ultimoCierre.cerradoAt))
+    : await db.select({ c: sql<number>`count(*)::int` }).from(tasks);
+  const tareasAgregadas = tareasAgregadasRow[0]?.c ?? 0;
+
+  // MVP: responsable with most done this week
+  const mvpMap = new Map<number, number>();
+  for (const t of doneRows) {
+    if (t.responsableId === null) continue;
+    mvpMap.set(t.responsableId, (mvpMap.get(t.responsableId) ?? 0) + 1);
+  }
+  let mvp: CerrarSemanaPreview["mvp"] = null;
+  let mvpId: number | null = null;
+  let mvpCount = 0;
+  for (const [id, c] of mvpMap) {
+    if (c > mvpCount) {
+      mvpId = id;
+      mvpCount = c;
+    }
+  }
+  if (mvpId !== null) {
+    const r = allResponsables.find((r) => r.id === mvpId);
+    if (r) mvp = { nombre: r.nombre, count: mvpCount };
+  }
+
+  // Oldest and fastest done (based on doneAt - createdAt)
+  let masVieja: CerrarSemanaPreview["masVieja"] = null;
+  let masRapida: CerrarSemanaPreview["masRapida"] = null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  for (const t of doneRows) {
+    if (!t.doneAt || !t.createdAt) continue;
+    const diff = Math.max(
+      0,
+      Math.round((t.doneAt.getTime() - t.createdAt.getTime()) / msPerDay),
     );
+    if (!masVieja || diff > masVieja.dias) {
+      masVieja = { titulo: t.titulo, dias: diff };
+    }
+    if (!masRapida || diff < masRapida.dias) {
+      masRapida = { titulo: t.titulo, dias: diff };
+    }
+  }
+
+  return {
+    doneEstaSemana: doneRows.length,
+    tareasAgregadas,
+    pendientesActuales,
+    pendientesUltimoCierre,
+    diffPctVsUltimo,
+    mvp,
+    masVieja,
+    masRapida,
+  };
+}
+
+export async function cerrarSemana() {
+  const ahora = new Date();
+  // Snapshot active count BEFORE we do anything
+  const [pendRow] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(tasks)
+    .where(ne(tasks.estado, "done"));
+  const pendientesAntes = pendRow?.c ?? 0;
+
+  await db.transaction(async (tx) => {
+    // 1. Archive done tasks into Logradas
+    const archived = await tx
+      .update(tasks)
+      .set({ closedWeekAt: ahora })
+      .where(and(eq(tasks.estado, "done"), isNull(tasks.closedWeekAt)))
+      .returning({ id: tasks.id });
+
+    // 2. Reset bucket on all active tasks (incluye in-flight)
+    await tx
+      .update(tasks)
+      .set({ bucket: null, bucketOrder: 1000, updatedAt: ahora })
+      .where(ne(tasks.estado, "done"));
+
+    // 3. Record the closure for next-week diff
+    await tx.insert(cierresSemana).values({
+      cerradoAt: ahora,
+      pendientesAntes,
+      doneArchivadas: archived.length,
+    });
+  });
   refresh();
 }
 
