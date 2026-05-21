@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { EtaPicker } from "@/components/eta-picker";
 import { createTask, updateTask, deleteTask } from "@/app/actions";
+import { bucketLabel } from "@/lib/buckets";
 import type { Responsable, Task, Estado } from "@/db/schema";
 
 type Mode =
@@ -211,10 +212,10 @@ export function TaskFormDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="_none">Sin definir</SelectItem>
+                      <SelectItem value="_none">{bucketLabel(null)}</SelectItem>
                       {existingBuckets.map((b) => (
                         <SelectItem key={b} value={String(b)}>
-                          Bucket {b}
+                          {bucketLabel(b)}
                         </SelectItem>
                       ))}
                     </SelectContent>

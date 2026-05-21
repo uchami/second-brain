@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { moveToSecondBrain } from "@/app/actions";
+import { bucketLabel } from "@/lib/buckets";
 
 export function MoveToSBDialog({
   open,
@@ -67,10 +68,10 @@ export function MoveToSBDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">Sin definir</SelectItem>
+                <SelectItem value="_none">{bucketLabel(null)}</SelectItem>
                 {existingBuckets.map((b) => (
                   <SelectItem key={b} value={String(b)}>
-                    Bucket {b}
+                    {bucketLabel(b)}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Trophy } from "lucide-react";
 import { daysBetween, formatDateLong, formatDaysInList } from "@/lib/dates";
+import { bucketLabel } from "@/lib/buckets";
 import type { Responsable, Task } from "@/db/schema";
 
 export function LogradaInfoDialog({
@@ -59,10 +60,7 @@ export function LogradaInfoDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <Info label="Responsable" value={responsable?.nombre ?? "—"} />
-            <Info
-              label="Bucket"
-              value={task.bucket === null ? "Sin definir" : `Bucket ${task.bucket}`}
-            />
+            <Info label="Bucket" value={bucketLabel(task.bucket)} />
             <Info
               label="Creada"
               value={task.createdAt ? formatDateLong(task.createdAt) : "—"}

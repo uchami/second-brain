@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Button } from "@/components/ui/button";
 import { SortableTask } from "@/components/sortable-task";
+import type { TaskHighlightTier } from "@/components/task-card";
 import { TaskFormDialog } from "@/components/task-form-dialog";
 import { MoveToSBDialog } from "@/components/move-to-sb-dialog";
 import { reorderInFlight } from "@/app/actions";
@@ -98,12 +99,19 @@ export function InFlightTab({
 
   const atLimit = orderedTasks.length >= IN_FLIGHT_LIMIT;
 
-  // Top priority = first non-done task in bucket 0. If it's not in
-  // in-flight, nag the user.
-  const topPriority = tasks
+  // Bucket 0 ranking used both for the missing-top banner and for
+  // mirroring the SB color tiers inside in-flight.
+  const bucketZero = tasks
     .filter((t) => t.bucket === 0 && t.estado !== "done")
-    .sort((a, b) => a.bucketOrder - b.bucketOrder)[0];
+    .sort((a, b) => a.bucketOrder - b.bucketOrder);
+  const topPriority = bucketZero[0];
   const showTopMissingBanner = !!topPriority && !topPriority.inFlight;
+  function tierFor(taskId: number): TaskHighlightTier | undefined {
+    const idx = bucketZero.findIndex((t) => t.id === taskId);
+    if (idx === 0) return "top";
+    if (idx > 0 && idx <= 3) return "near-top";
+    return undefined;
+  }
 
   return (
     <div className="space-y-3">
@@ -150,6 +158,7 @@ export function InFlightTab({
                     (r) => r.id === task.responsableId,
                   )}
                   context="in-flight"
+                  highlightTier={tierFor(task.id)}
                   onClickTask={() => setEditing(task)}
                   onSendToSB={() => setMoving(task)}
                   onMoveUp={() => moveUp(i)}

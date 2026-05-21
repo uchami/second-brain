@@ -22,6 +22,7 @@ import { LogradaInfoDialog } from "@/components/lograda-info-dialog";
 import { TaskFormDialog } from "@/components/task-form-dialog";
 import { QuickBucketDialog } from "@/components/quick-bucket-dialog";
 import { CerrarSemanaDialog } from "@/components/cerrar-semana-dialog";
+import { bucketLabel } from "@/lib/buckets";
 
 const PERMANENT_BUCKETS = [0, 1, 2, 3];
 import {
@@ -119,14 +120,14 @@ export function SecondBrainTab({
     sections.push({
       kind: "bucket",
       bucket: 0,
-      title: "Bucket 0",
+      title: bucketLabel(0),
       key: "bucket:0",
     });
   }
   sections.push({
     kind: "bucket",
     bucket: null,
-    title: "Sin definir",
+    title: bucketLabel(null),
     key: "bucket:none",
   });
   for (const n of grouped.bucketNumbers) {
@@ -134,7 +135,7 @@ export function SecondBrainTab({
     sections.push({
       kind: "bucket",
       bucket: n,
-      title: `Bucket ${n}`,
+      title: bucketLabel(n),
       key: `bucket:${n}`,
     });
   }

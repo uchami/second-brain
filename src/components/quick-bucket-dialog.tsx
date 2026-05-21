@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { updateTask } from "@/app/actions";
+import { bucketLabel } from "@/lib/buckets";
 
 export function QuickBucketDialog({
   open,
@@ -35,11 +36,7 @@ export function QuickBucketDialog({
     startTransition(async () => {
       try {
         await updateTask({ id: taskId, bucket });
-        toast.success(
-          bucket === null
-            ? "Movida a Sin definir"
-            : `Movida a Bucket ${bucket}`,
-        );
+        toast.success(`Movida a ${bucketLabel(bucket)}`);
         onOpenChange(false);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error");
@@ -51,12 +48,12 @@ export function QuickBucketDialog({
   const options: Array<{ key: string; bucket: number | null; label: string }> =
     [];
   if (existingBuckets.includes(0)) {
-    options.push({ key: "0", bucket: 0, label: "Bucket 0" });
+    options.push({ key: "0", bucket: 0, label: bucketLabel(0) });
   }
-  options.push({ key: "none", bucket: null, label: "Sin definir" });
+  options.push({ key: "none", bucket: null, label: bucketLabel(null) });
   for (const n of existingBuckets) {
     if (n === 0) continue;
-    options.push({ key: String(n), bucket: n, label: `Bucket ${n}` });
+    options.push({ key: String(n), bucket: n, label: bucketLabel(n) });
   }
 
   return (
