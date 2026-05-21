@@ -58,11 +58,18 @@ const etaColorClasses: Record<
 
 export type TaskHighlightTier = "top" | "near-top";
 
+export type BucketBadge = {
+  label: string;
+  position: number; // 1-based
+  total: number;
+};
+
 export function TaskCard({
   task,
   responsable,
   context,
   highlightTier,
+  bucketBadge,
   onClickTask,
   onSendToSB,
   onChangeBucket,
@@ -80,6 +87,7 @@ export function TaskCard({
   responsable: Responsable | undefined;
   context: "in-flight" | "second-brain" | "logradas";
   highlightTier?: TaskHighlightTier;
+  bucketBadge?: BucketBadge;
   onClickTask?: () => void;
   onSendToSB?: () => void;
   onChangeBucket?: () => void;
@@ -224,6 +232,11 @@ export function TaskCard({
           {isLograda && task.doneAt && task.createdAt && (
             <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
               {formatDaysInList(daysBetween(task.doneAt, task.createdAt))}
+            </span>
+          )}
+          {bucketBadge && (
+            <span className="rounded-md border border-neutral-300 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:border-neutral-700 dark:text-neutral-300">
+              {bucketBadge.label} · {bucketBadge.position}/{bucketBadge.total}
             </span>
           )}
         </div>
