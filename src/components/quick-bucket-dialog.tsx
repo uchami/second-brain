@@ -1,23 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
+import { Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { updateTask } from "@/app/actions";
 
 export function QuickBucketDialog({
@@ -33,16 +25,20 @@ export function QuickBucketDialog({
   currentBucket: number | null;
   existingBuckets: number[];
 }) {
-  const [bucket, setBucket] = useState<number | null>(currentBucket);
-  const [customBucket, setCustomBucket] = useState("");
   const [pending, startTransition] = useTransition();
 
-  function submit() {
+  function move(bucket: number | null) {
+    if (bucket === currentBucket) {
+      onOpenChange(false);
+      return;
+    }
     startTransition(async () => {
       try {
         await updateTask({ id: taskId, bucket });
         toast.success(
-          bucket === null ? "Movida a Sin definir" : `Movida a Bucket ${bucket}`,
+          bucket === null
+            ? "Movida a Sin definir"
+            : `Movida a Bucket ${bucket}`,
         );
         onOpenChange(false);
       } catch (err) {
@@ -51,77 +47,52 @@ export function QuickBucketDialog({
     });
   }
 
+  // Order: 0 first (if exists), then Sin definir, then 1..n. Mirrors the SB view.
+  const options: Array<{ key: string; bucket: number | null; label: string }> =
+    [];
+  if (existingBuckets.includes(0)) {
+    options.push({ key: "0", bucket: 0, label: "Bucket 0" });
+  }
+  options.push({ key: "none", bucket: null, label: "Sin definir" });
+  for (const n of existingBuckets) {
+    if (n === 0) continue;
+    options.push({ key: String(n), bucket: n, label: `Bucket ${n}` });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cambiar bucket</DialogTitle>
+          <DialogTitle>Mover a…</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Bucket</Label>
-            <Select
-              value={bucket === null ? "_none" : String(bucket)}
-              onValueChange={(v) =>
-                setBucket(v === "_none" ? null : Number(v))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">Sin definir</SelectItem>
-                {existingBuckets.map((b) => (
-                  <SelectItem key={b} value={String(b)}>
-                    Bucket {b}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>O un nuevo bucket</Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder="ej: 4"
-                value={customBucket}
-                onChange={(e) => setCustomBucket(e.target.value)}
-              />
-              <Button
-                variant="outline"
-                disabled={customBucket === ""}
-                onClick={() => {
-                  const n = parseInt(customBucket, 10);
-                  if (!Number.isFinite(n) || n < 0) {
-                    toast.error("Número inválido");
-                    return;
-                  }
-                  setBucket(n);
-                  setCustomBucket("");
-                }}
+        <div className="grid grid-cols-2 gap-2">
+          {options.map((opt) => {
+            const active = opt.bucket === currentBucket;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => move(opt.bucket)}
+                disabled={pending}
+                className={cn(
+                  "flex h-14 items-center justify-center rounded-xl border text-base font-medium transition-colors",
+                  active
+                    ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                    : "border-neutral-300 bg-white text-neutral-900 hover:border-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800",
+                  pending && "opacity-50",
+                )}
               >
-                Usar
-              </Button>
-            </div>
-          </div>
+                {active && <Check size={16} className="mr-1.5" />}
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={pending}
-          >
-            Cancelar
-          </Button>
-          <Button onClick={submit} disabled={pending}>
-            {pending ? "Moviendo…" : "Mover"}
-          </Button>
-        </DialogFooter>
+        <p className="text-center text-xs text-neutral-500">
+          Para crear un bucket nuevo, usa el modal de edición.
+        </p>
       </DialogContent>
     </Dialog>
   );

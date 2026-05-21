@@ -125,6 +125,7 @@ export function InFlightTab({
         </p>
       ) : (
         <DndContext
+          id="dnd-inflight"
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}

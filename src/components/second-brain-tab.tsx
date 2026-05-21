@@ -289,6 +289,7 @@ export function SecondBrainTab({
       </div>
 
       <DndContext
+        id="dnd-sb"
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragStart={handleDragStart}

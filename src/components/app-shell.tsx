@@ -4,11 +4,23 @@ import { useMemo, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { InFlightTab } from "@/components/in-flight-tab";
-import { SecondBrainTab } from "@/components/second-brain-tab";
 import type { Responsable, Task } from "@/db/schema";
+
+// @dnd-kit uses internal counters for aria-describedby that diverge between
+// SSR and CSR, producing hydration warnings. The tabs both rely on D&D, so we
+// skip server-rendering them entirely.
+const InFlightTab = dynamic(
+  () => import("@/components/in-flight-tab").then((m) => m.InFlightTab),
+  { ssr: false },
+);
+const SecondBrainTab = dynamic(
+  () =>
+    import("@/components/second-brain-tab").then((m) => m.SecondBrainTab),
+  { ssr: false },
+);
 
 export function AppShell({
   tasks,
