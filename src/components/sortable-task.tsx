@@ -2,13 +2,14 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { TaskCard } from "@/components/task-card";
+import { TaskCard, type TaskHighlightTier } from "@/components/task-card";
 import type { Responsable, Task } from "@/db/schema";
 
 type Props = {
   task: Task;
   responsable: Responsable | undefined;
   context: "in-flight" | "second-brain";
+  highlightTier?: TaskHighlightTier;
   onClickTask: () => void;
   onSendToSB?: () => void;
   onChangeBucket?: () => void;
@@ -22,6 +23,7 @@ export function SortableTask({
   task,
   responsable,
   context,
+  highlightTier,
   onClickTask,
   onSendToSB,
   onChangeBucket,
@@ -50,6 +52,7 @@ export function SortableTask({
         task={task}
         responsable={responsable}
         context={context}
+        highlightTier={highlightTier}
         onClickTask={onClickTask}
         onSendToSB={onSendToSB}
         onChangeBucket={onChangeBucket}

@@ -56,10 +56,13 @@ const etaColorClasses: Record<
     "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
 };
 
+export type TaskHighlightTier = "top" | "near-top";
+
 export function TaskCard({
   task,
   responsable,
   context,
+  highlightTier,
   onClickTask,
   onSendToSB,
   onChangeBucket,
@@ -76,6 +79,7 @@ export function TaskCard({
   task: Task;
   responsable: Responsable | undefined;
   context: "in-flight" | "second-brain" | "logradas";
+  highlightTier?: TaskHighlightTier;
   onClickTask?: () => void;
   onSendToSB?: () => void;
   onChangeBucket?: () => void;
@@ -126,6 +130,12 @@ export function TaskCard({
         isDone && !isLograda && "opacity-70",
         isLograda &&
           "border-emerald-100 bg-emerald-50/40 dark:border-emerald-950/50 dark:bg-emerald-950/10",
+        !isLograda &&
+          highlightTier === "top" &&
+          "border-emerald-400 bg-emerald-50 shadow-md shadow-emerald-200/50 dark:border-emerald-500 dark:bg-emerald-950/30 dark:shadow-emerald-900/30",
+        !isLograda &&
+          highlightTier === "near-top" &&
+          "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/20",
       )}
     >
       {/* Drag handle (desktop only) */}

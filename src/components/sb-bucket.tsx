@@ -9,6 +9,7 @@ import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SortableTask } from "@/components/sortable-task";
+import type { TaskHighlightTier } from "@/components/task-card";
 import type { Responsable, Task } from "@/db/schema";
 
 export function SBBucket({
@@ -18,6 +19,7 @@ export function SBBucket({
   taskIds,
   tasks,
   responsables,
+  isBucketZero,
   onClickTask,
   onChangeBucket,
   onMoveUp,
@@ -34,6 +36,7 @@ export function SBBucket({
   taskIds: number[];
   tasks: Task[];
   responsables: Responsable[];
+  isBucketZero?: boolean;
   onClickTask: (task: Task) => void;
   onChangeBucket?: (task: Task) => void;
   onMoveUp: (taskId: number, bucketKey: string) => void;
@@ -94,24 +97,32 @@ export function SBBucket({
                 Sin tareas
               </div>
             ) : (
-              itemTasks.map((task, i) => (
-                <SortableTask
-                  key={task.id}
-                  task={task}
-                  responsable={responsables.find(
-                    (r) => r.id === task.responsableId,
-                  )}
-                  context="second-brain"
-                  onClickTask={() => onClickTask(task)}
-                  onChangeBucket={
-                    onChangeBucket ? () => onChangeBucket(task) : undefined
-                  }
-                  onMoveUp={() => onMoveUp(task.id, id)}
-                  onMoveDown={() => onMoveDown(task.id, id)}
-                  canMoveUp={i > 0}
-                  canMoveDown={i < itemTasks.length - 1}
-                />
-              ))
+              itemTasks.map((task, i) => {
+                let tier: TaskHighlightTier | undefined;
+                if (isBucketZero) {
+                  if (i === 0) tier = "top";
+                  else if (i <= 3) tier = "near-top";
+                }
+                return (
+                  <SortableTask
+                    key={task.id}
+                    task={task}
+                    responsable={responsables.find(
+                      (r) => r.id === task.responsableId,
+                    )}
+                    context="second-brain"
+                    highlightTier={tier}
+                    onClickTask={() => onClickTask(task)}
+                    onChangeBucket={
+                      onChangeBucket ? () => onChangeBucket(task) : undefined
+                    }
+                    onMoveUp={() => onMoveUp(task.id, id)}
+                    onMoveDown={() => onMoveDown(task.id, id)}
+                    canMoveUp={i > 0}
+                    canMoveDown={i < itemTasks.length - 1}
+                  />
+                );
+              })
             )}
           </SortableContext>
         </div>

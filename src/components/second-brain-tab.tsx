@@ -51,6 +51,11 @@ export function SecondBrainTab({
   responsables: Responsable[];
 }) {
   const [showLogradas, setShowLogradas] = useState(false);
+  const [collapsedBuckets, setCollapsedBuckets] = useState<
+    Record<string, boolean>
+  >({});
+  const toggleBucket = (key: string) =>
+    setCollapsedBuckets((prev) => ({ ...prev, [key]: !prev[key] }));
   const [editing, setEditing] = useState<Task | null>(null);
   const [viewingLograda, setViewingLograda] = useState<Task | null>(null);
   const [creating, setCreating] = useState<{ bucket: number | null } | null>(
@@ -292,36 +297,54 @@ export function SecondBrainTab({
                 overBucketKey === s.key &&
                 activeBucketKey !== null &&
                 activeBucketKey !== s.key;
+              const collapsed = !!collapsedBuckets[s.key];
               return (
                 <SBBucket
                   key={s.key}
                   id={s.key}
                   title={s.title}
+                  subtitle={
+                    collapsed && tasksInBucket.length > 0
+                      ? `${tasksInBucket.length}`
+                      : undefined
+                  }
                   taskIds={tasksInBucket.map((t) => t.id)}
                   tasks={tasksInBucket}
                   responsables={responsables}
+                  isBucketZero={s.bucket === 0}
                   onClickTask={(t) => setEditing(t)}
                   onChangeBucket={(t) => setQuickBucketTask(t)}
                   onMoveUp={moveUp}
                   onMoveDown={moveDown}
                   onAddTask={() => setCreating({ bucket: s.bucket })}
                   highlight={isOtherBucketHover}
+                  collapsible
+                  collapsed={collapsed}
+                  onToggleCollapse={() => toggleBucket(s.key)}
                 />
               );
             }
             if (s.kind === "done") {
+              const collapsed = !!collapsedBuckets["done"];
               return (
                 <SBBucket
                   key="done"
                   id="done"
                   title="Done"
-                  subtitle="esta semana"
+                  subtitle={
+                    collapsed && grouped.done.length > 0
+                      ? `${grouped.done.length} · esta semana`
+                      : "esta semana"
+                  }
                   taskIds={grouped.done.map((t) => t.id)}
                   tasks={grouped.done}
                   responsables={responsables}
                   onClickTask={(t) => setEditing(t)}
                   onMoveUp={() => {}}
                   onMoveDown={() => {}}
+                  collapsible
+                  collapsed={collapsed}
+                  onToggleCollapse={() => toggleBucket("done")}
                 />
               );
             }
