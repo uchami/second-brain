@@ -74,23 +74,24 @@ export function daysFromToday(iso: string, today: Date = new Date()): number {
   return Math.round((target.getTime() - t0.getTime()) / msPerDay);
 }
 
-export type EtaColor = "yellow" | "red" | "violet" | "neutral";
+export type EtaColor = "yellow" | "red" | "red-dark" | "violet" | "neutral";
 
 /**
  * Color rule:
- *  - sin ETA -> neutral (caller decides)
- *  - eta == today -> yellow
- *  - 1..3 days past -> red
- *  - >3 days past -> violet
- *  - future -> neutral
+ *  - sin ETA -> neutral
+ *  - hoy -> yellow
+ *  - ayer (-1) -> red
+ *  - anteayer (-2) -> red-dark
+ *  - 3+ días pasado -> violet (caller añade calavera)
+ *  - futuro -> neutral
  */
 export function etaColor(iso: string | null, today: Date = new Date()): EtaColor {
   if (!iso) return "neutral";
   const diff = daysFromToday(iso, today);
   if (diff === 0) return "yellow";
   if (diff > 0) return "neutral";
-  // diff < 0: past
-  if (diff >= -3) return "red";
+  if (diff === -1) return "red";
+  if (diff === -2) return "red-dark";
   return "violet";
 }
 

@@ -46,6 +46,8 @@ const etaColorClasses: Record<
   yellow:
     "bg-amber-200 text-amber-900 dark:bg-amber-500/30 dark:text-amber-200",
   red: "bg-red-200 text-red-900 dark:bg-red-500/30 dark:text-red-200",
+  "red-dark":
+    "bg-red-600 text-white dark:bg-red-700 dark:text-red-50",
   violet:
     "bg-violet-300 text-violet-900 dark:bg-violet-500/30 dark:text-violet-200",
   neutral:
@@ -196,6 +198,7 @@ export function TaskCard({
                 etaColorClasses[eColor],
               )}
             >
+              {eColor === "violet" && "💀 "}
               {formatEtaShort(task.eta)}
             </span>
           )}
