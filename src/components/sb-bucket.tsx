@@ -19,12 +19,14 @@ export function SBBucket({
   tasks,
   responsables,
   onClickTask,
+  onChangeBucket,
   onMoveUp,
   onMoveDown,
   onAddTask,
   collapsible,
   collapsed,
   onToggleCollapse,
+  highlight,
 }: {
   id: string;
   title: string;
@@ -33,12 +35,14 @@ export function SBBucket({
   tasks: Task[];
   responsables: Responsable[];
   onClickTask: (task: Task) => void;
+  onChangeBucket?: (task: Task) => void;
   onMoveUp: (taskId: number, bucketKey: string) => void;
   onMoveDown: (taskId: number, bucketKey: string) => void;
   onAddTask?: () => void;
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  highlight?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const itemTasks = taskIds
@@ -77,7 +81,8 @@ export function SBBucket({
           ref={setNodeRef}
           className={cn(
             "min-h-[44px] space-y-2 rounded-xl p-1 transition-colors",
-            isOver && "bg-neutral-100 ring-2 ring-neutral-300 dark:bg-neutral-800 dark:ring-neutral-700",
+            (isOver || highlight) &&
+              "bg-neutral-200/70 ring-2 ring-neutral-400 dark:bg-neutral-700/40 dark:ring-neutral-500",
           )}
         >
           <SortableContext
@@ -98,6 +103,9 @@ export function SBBucket({
                   )}
                   context="second-brain"
                   onClickTask={() => onClickTask(task)}
+                  onChangeBucket={
+                    onChangeBucket ? () => onChangeBucket(task) : undefined
+                  }
                   onMoveUp={() => onMoveUp(task.id, id)}
                   onMoveDown={() => onMoveDown(task.id, id)}
                   canMoveUp={i > 0}

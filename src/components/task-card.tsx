@@ -11,9 +11,11 @@ import {
   Rocket,
   StickyNote,
   Trophy,
+  FolderInput,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { etaColor, formatEtaShort } from "@/lib/eta";
+import { daysBetween, formatDaysInList } from "@/lib/dates";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { markDone, unmarkDone, promoteToInFlight } from "@/app/actions";
@@ -60,6 +62,7 @@ export function TaskCard({
   context,
   onClickTask,
   onSendToSB,
+  onChangeBucket,
   // mobile reorder controls (optional)
   showReorder,
   onMoveUp,
@@ -75,6 +78,7 @@ export function TaskCard({
   context: "in-flight" | "second-brain" | "logradas";
   onClickTask?: () => void;
   onSendToSB?: () => void;
+  onChangeBucket?: () => void;
   showReorder?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -207,6 +211,11 @@ export function TaskCard({
               <Rocket size={10} /> en in-flight
             </span>
           )}
+          {isLograda && task.doneAt && task.createdAt && (
+            <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {formatDaysInList(daysBetween(task.doneAt, task.createdAt))}
+            </span>
+          )}
         </div>
       </button>
 
@@ -237,7 +246,7 @@ export function TaskCard({
           </div>
         )}
 
-        {/* Action button */}
+        {/* Action buttons */}
         {context === "in-flight" && onSendToSB && (
           <Button
             variant="ghost"
@@ -247,6 +256,17 @@ export function TaskCard({
             title="Mandar al second brain"
           >
             <Send size={16} />
+          </Button>
+        )}
+        {context === "second-brain" && !isDone && onChangeBucket && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onChangeBucket}
+            aria-label="Cambiar bucket"
+            title="Cambiar bucket"
+          >
+            <FolderInput size={16} />
           </Button>
         )}
         {context === "second-brain" && !task.inFlight && !isDone && (

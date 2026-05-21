@@ -11,6 +11,7 @@ type Props = {
   context: "in-flight" | "second-brain";
   onClickTask: () => void;
   onSendToSB?: () => void;
+  onChangeBucket?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   canMoveUp: boolean;
@@ -23,6 +24,7 @@ export function SortableTask({
   context,
   onClickTask,
   onSendToSB,
+  onChangeBucket,
   onMoveUp,
   onMoveDown,
   canMoveUp,
@@ -50,6 +52,7 @@ export function SortableTask({
         context={context}
         onClickTask={onClickTask}
         onSendToSB={onSendToSB}
+        onChangeBucket={onChangeBucket}
         showReorder
         onMoveUp={onMoveUp}
         onMoveDown={onMoveDown}

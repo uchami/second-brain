@@ -9,14 +9,18 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
-  closestCenter,
+  closestCorners,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Button } from "@/components/ui/button";
 import { SBBucket } from "@/components/sb-bucket";
 import { LogradasSection } from "@/components/logradas-section";
+import { LogradaInfoDialog } from "@/components/lograda-info-dialog";
 import { TaskFormDialog } from "@/components/task-form-dialog";
+import { QuickBucketDialog } from "@/components/quick-bucket-dialog";
 import {
   cerrarSemana,
   moveTaskToBucketPosition,
@@ -46,7 +50,13 @@ export function SecondBrainTab({
 }) {
   const [showLogradas, setShowLogradas] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [viewingLograda, setViewingLograda] = useState<Task | null>(null);
   const [creating, setCreating] = useState<{ bucket: number | null } | null>(
+    null,
+  );
+  const [quickBucketTask, setQuickBucketTask] = useState<Task | null>(null);
+  const [overBucketKey, setOverBucketKey] = useState<BucketKey | null>(null);
+  const [activeBucketKey, setActiveBucketKey] = useState<BucketKey | null>(
     null,
   );
   const [, startTransition] = useTransition();
@@ -136,65 +146,79 @@ export function SecondBrainTab({
     return undefined;
   }
 
+  function resolveOverBucket(overId: string): BucketKey | null {
+    if (overId.startsWith("bucket:") || overId === "done" || overId === "logradas") {
+      return overId;
+    }
+    const overTaskId = Number(overId);
+    const container = findContainerOfTask(overTaskId);
+    if (container === undefined) return null;
+    if (container === "done" || container === "logradas") return container;
+    return bucketKey(container);
+  }
+
+  function handleDragStart(e: DragStartEvent) {
+    const taskId = Number(e.active.id);
+    const src = findContainerOfTask(taskId);
+    if (src === undefined || src === "done" || src === "logradas") {
+      setActiveBucketKey(null);
+    } else {
+      setActiveBucketKey(bucketKey(src));
+    }
+  }
+
+  function handleDragOver(e: DragOverEvent) {
+    if (!e.over) {
+      setOverBucketKey(null);
+      return;
+    }
+    const target = resolveOverBucket(String(e.over.id));
+    setOverBucketKey(target);
+  }
+
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
+    setOverBucketKey(null);
+    setActiveBucketKey(null);
     if (!over) return;
     const taskId = Number(active.id);
     const sourceBucket = findContainerOfTask(taskId);
+    if (sourceBucket === undefined) return;
     if (sourceBucket === "done" || sourceBucket === "logradas") return;
 
-    // over.id can be a task id (when dropped on a task) or a bucket key (when dropped on container)
     const overIdStr = String(over.id);
-    let targetBucket: number | null;
-    let targetIndex: number;
+    const targetKey = resolveOverBucket(overIdStr);
+    if (!targetKey || targetKey === "done" || targetKey === "logradas") return;
 
-    if (overIdStr.startsWith("bucket:")) {
-      const parsed = parseBucketKey(overIdStr);
-      if (parsed === "done" || parsed === "logradas") return;
-      targetBucket = parsed as number | null;
-      const targetArr = grouped.bucketMap.get(targetBucket) ?? [];
-      targetIndex = targetArr.length;
-    } else {
-      const overTaskId = Number(over.id);
-      const targetContainer = findContainerOfTask(overTaskId);
-      if (
-        targetContainer === undefined ||
-        targetContainer === "done" ||
-        targetContainer === "logradas"
-      )
-        return;
-      targetBucket = targetContainer;
-      const arr = grouped.bucketMap.get(targetBucket) ?? [];
-      const idx = arr.findIndex((t) => t.id === overTaskId);
-      targetIndex = idx;
-      // If same bucket and moving down, adjust
-      if (sourceBucket === targetBucket) {
-        const srcIdx = arr.findIndex((t) => t.id === taskId);
-        if (srcIdx !== -1 && srcIdx < idx) {
-          targetIndex = idx;
-        } else {
-          targetIndex = idx;
-        }
-      }
-    }
+    const parsedTarget = parseBucketKey(targetKey);
+    if (parsedTarget === "done" || parsedTarget === "logradas") return;
+    const targetBucket = parsedTarget as number | null;
 
     if (sourceBucket === targetBucket) {
-      // Reorder within same bucket
+      // Same bucket: respect the drop position relative to the task we dropped on
       const arr = grouped.bucketMap.get(targetBucket) ?? [];
       const ids = arr.map((t) => t.id);
       const srcIdx = ids.indexOf(taskId);
       if (srcIdx === -1) return;
+      let dropIdx: number;
+      if (overIdStr.startsWith("bucket:")) {
+        dropIdx = ids.length - 1;
+      } else {
+        dropIdx = ids.indexOf(Number(overIdStr));
+        if (dropIdx === -1) dropIdx = ids.length - 1;
+      }
+      if (srcIdx === dropIdx) return;
       ids.splice(srcIdx, 1);
-      const insertAt = Math.max(0, Math.min(targetIndex, ids.length));
-      ids.splice(insertAt, 0, taskId);
+      ids.splice(dropIdx, 0, taskId);
       startTransition(() => {
         reorderBucket(targetBucket, ids).catch((err) => toast.error(err.message));
       });
     } else {
-      // Cross-bucket
+      // Cross-bucket: always append to the end of the target bucket
+      const targetArr = grouped.bucketMap.get(targetBucket) ?? [];
       startTransition(() => {
-        moveTaskToBucketPosition(taskId, targetBucket, targetIndex).catch((err) =>
-          toast.error(err.message),
+        moveTaskToBucketPosition(taskId, targetBucket, targetArr.length).catch(
+          (err) => toast.error(err.message),
         );
       });
     }
@@ -266,13 +290,23 @@ export function SecondBrainTab({
 
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={() => {
+          setOverBucketKey(null);
+          setActiveBucketKey(null);
+        }}
       >
         <div className="space-y-5">
           {sections.map((s) => {
             if (s.kind === "bucket") {
               const tasksInBucket = grouped.bucketMap.get(s.bucket) ?? [];
+              const isOtherBucketHover =
+                overBucketKey === s.key &&
+                activeBucketKey !== null &&
+                activeBucketKey !== s.key;
               return (
                 <SBBucket
                   key={s.key}
@@ -282,9 +316,11 @@ export function SecondBrainTab({
                   tasks={tasksInBucket}
                   responsables={responsables}
                   onClickTask={(t) => setEditing(t)}
+                  onChangeBucket={(t) => setQuickBucketTask(t)}
                   onMoveUp={moveUp}
                   onMoveDown={moveDown}
                   onAddTask={() => setCreating({ bucket: s.bucket })}
+                  highlight={isOtherBucketHover}
                 />
               );
             }
@@ -311,7 +347,7 @@ export function SecondBrainTab({
                 responsables={responsables}
                 collapsed={!showLogradas}
                 onToggleCollapse={() => setShowLogradas((s) => !s)}
-                onClickTask={(t) => setEditing(t)}
+                onClickTask={(t) => setViewingLograda(t)}
               />
             );
           })}
@@ -333,6 +369,25 @@ export function SecondBrainTab({
           onOpenChange={(o) => !o && setCreating(null)}
           mode={{ kind: "create", defaults: { bucket: creating.bucket } }}
           responsables={responsables}
+          existingBuckets={existingBuckets}
+        />
+      )}
+      {viewingLograda && (
+        <LogradaInfoDialog
+          open={!!viewingLograda}
+          onOpenChange={(o) => !o && setViewingLograda(null)}
+          task={viewingLograda}
+          responsable={responsables.find(
+            (r) => r.id === viewingLograda.responsableId,
+          )}
+        />
+      )}
+      {quickBucketTask && (
+        <QuickBucketDialog
+          open={!!quickBucketTask}
+          onOpenChange={(o) => !o && setQuickBucketTask(null)}
+          taskId={quickBucketTask.id}
+          currentBucket={quickBucketTask.bucket}
           existingBuckets={existingBuckets}
         />
       )}
