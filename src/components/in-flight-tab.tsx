@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, AlertTriangle } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -98,6 +98,13 @@ export function InFlightTab({
 
   const atLimit = orderedTasks.length >= IN_FLIGHT_LIMIT;
 
+  // Top priority = first non-done task in bucket 0. If it's not in
+  // in-flight, nag the user.
+  const topPriority = tasks
+    .filter((t) => t.bucket === 0 && t.estado !== "done")
+    .sort((a, b) => a.bucketOrder - b.bucketOrder)[0];
+  const showTopMissingBanner = !!topPriority && !topPriority.inFlight;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -154,6 +161,18 @@ export function InFlightTab({
             </div>
           </SortableContext>
         </DndContext>
+      )}
+
+      {showTopMissingBanner && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-3 text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <div className="text-sm">
+            <p className="font-semibold">¡Ojo! No estás haciendo la cosa más importante.</p>
+            <p className="mt-0.5 text-xs opacity-80">
+              {topPriority.titulo}
+            </p>
+          </div>
+        </div>
       )}
 
       {createOpen && (
