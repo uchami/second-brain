@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Second brain
 
-## Getting Started
+Mi app personal de tareas + priorización por buckets. Hecha en Next.js, Drizzle y Postgres. Pensada para correr gratis en Vercel + Neon.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js 16 (App Router) + TypeScript
+- Tailwind v4
+- Drizzle ORM + Postgres
+- Radix primitives + lucide-react
+- @dnd-kit para drag & drop
+- PWA mínima (instalable en mobile)
+
+## Desarrollo local
+
+### 1. Postgres local con Docker
+
+```sh
+docker run -d --name secondbrain-pg \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=secondbrain \
+  -p 5433:5432 postgres:16-alpine
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Variables de entorno
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copia `.env.local.example` a `.env.local` y completa:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5433/secondbrain
+APP_PIN=1234
+SESSION_SECRET=$(openssl rand -hex 32)
+```
 
-## Learn More
+### 3. Migrar la base y sembrar responsables
 
-To learn more about Next.js, take a look at the following resources:
+```sh
+npm install
+npm run db:migrate
+npm run db:seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Levantar
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```sh
+npm run dev
+```
 
-## Deploy on Vercel
+Abrí http://localhost:3000 e ingresá el PIN.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy a Vercel + Neon (gratis)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Crear DB en Neon**: https://neon.tech → New project → copia el connection string (con `?sslmode=require`).
+2. **Subir a GitHub**: `gh repo create second-brain --private --source=. --push`.
+3. **Importar a Vercel**: https://vercel.com/new → seleccioná el repo.
+4. **Env vars en Vercel**:
+   - `DATABASE_URL` = connection string de Neon
+   - `APP_PIN` = tu PIN
+   - `SESSION_SECRET` = `openssl rand -hex 32`
+5. **Aplicar migraciones a Neon** desde local:
+   ```sh
+   DATABASE_URL="<neon-url>" npm run db:migrate
+   DATABASE_URL="<neon-url>" npm run db:seed
+   ```
+6. **PWA en mobile**: abrí la URL de Vercel en Safari/Chrome → "Compartir" → "Añadir a pantalla de inicio".
+
+## Scripts
+
+- `npm run dev` — dev server
+- `npm run build` — build producción
+- `npm run db:generate` — genera migración SQL desde el schema
+- `npm run db:migrate` — aplica migraciones a la DB
+- `npm run db:push` — sincroniza schema directo (sin migraciones)
+- `npm run db:seed` — siembra responsables iniciales
+
+## Modelo de datos
+
+- **responsables**: `id, nombre, color, orden`
+- **tasks**:
+  - `titulo, responsable_id, estado` (pendiente | en_proceso | delegado | done)
+  - `bucket` (null = "Sin definir") + `bucket_order`
+  - `in_flight` (bool) + `in_flight_order`
+  - `eta` (date) — el día de la semana se resuelve al más próximo en el cliente
+  - `done_at`, `closed_week_at` — para distinguir Done de esta semana vs Logradas
