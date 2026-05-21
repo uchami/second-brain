@@ -132,10 +132,10 @@ export function TaskCard({
           "border-emerald-100 bg-emerald-50/40 dark:border-emerald-950/50 dark:bg-emerald-950/10",
         !isLograda &&
           highlightTier === "top" &&
-          "border-emerald-400 bg-emerald-50 shadow-md shadow-emerald-200/50 dark:border-emerald-500 dark:bg-emerald-950/30 dark:shadow-emerald-900/30",
+          "border-emerald-500 bg-emerald-200 shadow-lg shadow-emerald-400/40 dark:border-emerald-500 dark:bg-emerald-900/50 dark:shadow-emerald-700/30",
         !isLograda &&
           highlightTier === "near-top" &&
-          "border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/20",
+          "border-sky-100 bg-sky-50/50 dark:border-sky-950 dark:bg-sky-950/10",
       )}
     >
       {/* Drag handle (desktop only) */}
