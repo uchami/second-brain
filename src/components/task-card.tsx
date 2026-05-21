@@ -5,11 +5,11 @@ import { toast } from "sonner";
 import {
   Send,
   Plane,
-  Check,
   ArrowUp,
   ArrowDown,
   GripVertical,
   Rocket,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { etaColor, formatEtaShort } from "@/lib/eta";
@@ -22,6 +22,7 @@ const estadoLabels: Record<Estado, string> = {
   pendiente: "Pendiente",
   en_proceso: "En proceso",
   delegado: "Delegado",
+  postergado: "Postergado",
   done: "Done",
 };
 
@@ -32,6 +33,8 @@ const estadoColors: Record<Estado, string> = {
     "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
   delegado:
     "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300",
+  postergado:
+    "bg-slate-200 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
   done: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
 };
 
@@ -142,11 +145,18 @@ export function TaskCard({
       >
         <div
           className={cn(
-            "text-sm leading-snug",
+            "flex items-start gap-1.5 text-sm leading-snug",
             isDone && "text-neutral-400 line-through dark:text-neutral-500",
           )}
         >
-          {task.titulo}
+          <span className="flex-1">{task.titulo}</span>
+          {task.detalle && (
+            <StickyNote
+              size={12}
+              className="mt-0.5 shrink-0 text-neutral-400"
+              aria-label="Tiene detalle"
+            />
+          )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {responsable && (

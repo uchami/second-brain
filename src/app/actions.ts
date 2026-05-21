@@ -31,6 +31,7 @@ export async function getAllData() {
 
 export type CreateTaskInput = {
   titulo: string;
+  detalle?: string | null;
   responsableId?: number | null;
   estado?: Estado;
   bucket?: number | null;
@@ -56,6 +57,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     .insert(tasks)
     .values({
       titulo,
+      detalle: input.detalle ?? null,
       responsableId: input.responsableId ?? null,
       estado: input.estado ?? "pendiente",
       bucket: input.bucket ?? null,
@@ -74,6 +76,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
 export type UpdateTaskInput = {
   id: number;
   titulo?: string;
+  detalle?: string | null;
   responsableId?: number | null;
   estado?: Estado;
   eta?: string | null;
@@ -87,6 +90,7 @@ export async function updateTask(input: UpdateTaskInput): Promise<Task> {
     if (!t) throw new Error("El título no puede estar vacío");
     set.titulo = t;
   }
+  if (input.detalle !== undefined) set.detalle = input.detalle;
   if (input.responsableId !== undefined) set.responsableId = input.responsableId;
   if (input.estado !== undefined) set.estado = input.estado;
   if (input.eta !== undefined) set.eta = input.eta;

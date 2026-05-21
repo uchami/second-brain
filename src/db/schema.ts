@@ -14,6 +14,7 @@ export const estadoEnum = pgEnum("estado", [
   "pendiente",
   "en_proceso",
   "delegado",
+  "postergado",
   "done",
 ]);
 
@@ -32,6 +33,7 @@ export const tasks = pgTable(
   {
     id: serial("id").primaryKey(),
     titulo: text("titulo").notNull(),
+    detalle: text("detalle"),
     responsableId: integer("responsable_id").references(() => responsables.id, {
       onDelete: "set null",
     }),

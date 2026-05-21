@@ -43,6 +43,7 @@ export function TaskFormDialog({
     mode.kind === "edit"
       ? {
           titulo: mode.task.titulo,
+          detalle: mode.task.detalle,
           responsableId: mode.task.responsableId,
           estado: mode.task.estado,
           eta: mode.task.eta,
@@ -50,6 +51,7 @@ export function TaskFormDialog({
         }
       : {
           titulo: "",
+          detalle: null as string | null,
           responsableId: responsables[0]?.id ?? null,
           estado: "pendiente" as Estado,
           eta: null as string | null,
@@ -57,6 +59,7 @@ export function TaskFormDialog({
         };
 
   const [titulo, setTitulo] = useState(initial.titulo);
+  const [detalle, setDetalle] = useState<string>(initial.detalle ?? "");
   const [responsableId, setResponsableId] = useState<number | null>(
     initial.responsableId,
   );
@@ -72,9 +75,11 @@ export function TaskFormDialog({
   function submit() {
     startTransition(async () => {
       try {
+        const detalleClean = detalle.trim() === "" ? null : detalle;
         if (mode.kind === "create") {
           await createTask({
             titulo,
+            detalle: detalleClean,
             responsableId,
             estado,
             eta: isInFlightCreate ? null : eta,
@@ -86,6 +91,7 @@ export function TaskFormDialog({
           await updateTask({
             id: mode.task.id,
             titulo,
+            detalle: detalleClean,
             responsableId,
             estado,
             eta,
@@ -139,6 +145,17 @@ export function TaskFormDialog({
           </div>
 
           <div className="space-y-1.5">
+            <Label htmlFor="detalle">Detalle (opcional)</Label>
+            <Textarea
+              id="detalle"
+              value={detalle}
+              onChange={(e) => setDetalle(e.target.value)}
+              placeholder="Notas, links, contexto…"
+              className="min-h-[60px]"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Responsable</Label>
             <Select
               value={responsableId === null ? "_none" : String(responsableId)}
@@ -173,6 +190,7 @@ export function TaskFormDialog({
                 <SelectItem value="pendiente">Pendiente</SelectItem>
                 <SelectItem value="en_proceso">En proceso</SelectItem>
                 <SelectItem value="delegado">Delegado</SelectItem>
+                <SelectItem value="postergado">Postergado</SelectItem>
                 <SelectItem value="done">Done</SelectItem>
               </SelectContent>
             </Select>
