@@ -5,8 +5,6 @@ import { toast } from "sonner";
 import {
   Send,
   Plane,
-  ArrowUp,
-  ArrowDown,
   GripVertical,
   Rocket,
   StickyNote,
@@ -73,12 +71,7 @@ export function TaskCard({
   onClickTask,
   onSendToSB,
   onChangeBucket,
-  // mobile reorder controls (optional)
   showReorder,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp,
-  canMoveDown,
   // drag handle attributes (from @dnd-kit sortable)
   dragHandleProps,
   isDragging,
@@ -92,10 +85,6 @@ export function TaskCard({
   onSendToSB?: () => void;
   onChangeBucket?: () => void;
   showReorder?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
   isDragging?: boolean;
 }) {
@@ -146,13 +135,13 @@ export function TaskCard({
           "border-sky-100 bg-sky-50/50 dark:border-sky-950 dark:bg-sky-950/10",
       )}
     >
-      {/* Drag handle (desktop only) */}
+      {/* Drag handle */}
       {showReorder && !isLograda && (
         <button
           type="button"
           data-dnd-handle
           {...dragHandleProps}
-          className="hidden touch-none items-center self-stretch text-neutral-300 hover:text-neutral-600 sm:flex dark:text-neutral-700 dark:hover:text-neutral-300"
+          className="flex touch-none items-center self-stretch text-neutral-300 hover:text-neutral-600 dark:text-neutral-700 dark:hover:text-neutral-300"
           aria-label="Reordenar"
         >
           <GripVertical size={16} />
@@ -243,32 +232,6 @@ export function TaskCard({
       </button>
 
       <div className="flex shrink-0 items-center gap-0.5">
-        {/* Mobile reorder buttons */}
-        {showReorder && !isLograda && (
-          <div className="flex flex-col sm:hidden">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              disabled={!canMoveUp}
-              onClick={onMoveUp}
-              aria-label="Subir"
-            >
-              <ArrowUp size={14} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              disabled={!canMoveDown}
-              onClick={onMoveDown}
-              aria-label="Bajar"
-            >
-              <ArrowDown size={14} />
-            </Button>
-          </div>
-        )}
-
         {/* Action buttons */}
         {context === "in-flight" && onSendToSB && (
           <Button

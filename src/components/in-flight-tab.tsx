@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard, type TaskHighlightTier } from "@/components/task-card";
 import { TaskFormDialog } from "@/components/task-form-dialog";
-import { MoveToSBDialog } from "@/components/move-to-sb-dialog";
+import { moveToSecondBrain } from "@/app/actions";
 import { bucketLabel } from "@/lib/buckets";
 import type { Responsable, Task } from "@/db/schema";
 
@@ -64,7 +64,18 @@ export function InFlightTab({
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [moving, setMoving] = useState<Task | null>(null);
+  const [, startTransition] = useTransition();
+
+  function handleSendToSB(taskId: number) {
+    startTransition(async () => {
+      try {
+        await moveToSecondBrain(taskId);
+        toast.success("Tarea mandada al second brain");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error");
+      }
+    });
+  }
 
   const atLimit = inFlight.length >= IN_FLIGHT_LIMIT;
 
@@ -117,7 +128,7 @@ export function InFlightTab({
               highlightTier={tierFor(task.id)}
               bucketBadge={bucketPositions.get(task.id)}
               onClickTask={() => setEditing(task)}
-              onSendToSB={() => setMoving(task)}
+              onSendToSB={() => handleSendToSB(task.id)}
             />
           ))}
         </div>
@@ -151,15 +162,6 @@ export function InFlightTab({
           onOpenChange={(o) => !o && setEditing(null)}
           mode={{ kind: "edit", task: editing }}
           responsables={responsables}
-          existingBuckets={existingBuckets}
-        />
-      )}
-
-      {moving && (
-        <MoveToSBDialog
-          open={!!moving}
-          onOpenChange={(o) => !o && setMoving(null)}
-          taskId={moving.id}
           existingBuckets={existingBuckets}
         />
       )}

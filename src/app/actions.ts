@@ -96,8 +96,16 @@ export async function updateTask(input: UpdateTaskInput): Promise<Task> {
   if (input.estado !== undefined) set.estado = input.estado;
   if (input.eta !== undefined) set.eta = input.eta;
   if (input.bucket !== undefined) {
-    set.bucket = input.bucket;
-    set.bucketOrder = await nextBucketOrder(input.bucket);
+    // Only reset bucketOrder if the bucket actually changed — editing other
+    // fields (e.g. ETA) shouldn't kick the task to the bottom of its bucket.
+    const [current] = await db
+      .select({ bucket: tasks.bucket })
+      .from(tasks)
+      .where(eq(tasks.id, input.id));
+    if (current && current.bucket !== input.bucket) {
+      set.bucket = input.bucket;
+      set.bucketOrder = await nextBucketOrder(input.bucket);
+    }
   }
 
   const [updated] = await db
@@ -116,16 +124,13 @@ export async function deleteTask(id: number) {
 
 // ---------- IN-FLIGHT MOVEMENT ----------
 
-export async function moveToSecondBrain(id: number, bucket: number | null) {
-  // Tarea sale de in-flight, queda en SB con bucket (o null = "Sin definir")
-  const newBucketOrder = await nextBucketOrder(bucket);
+export async function moveToSecondBrain(id: number) {
+  // Tarea sale de in-flight, se queda en el bucket y posición donde ya estaba.
   await db
     .update(tasks)
     .set({
       inFlight: false,
       inFlightOrder: null,
-      bucket,
-      bucketOrder: newBucketOrder,
       updatedAt: new Date(),
     })
     .where(eq(tasks.id, id));
@@ -216,33 +221,6 @@ export async function reorderBucket(
     }
   });
   refresh();
-}
-
-/** Move a task to a specific position (0-indexed) in a target bucket. */
-export async function moveTaskToBucketPosition(
-  taskId: number,
-  targetBucket: number | null,
-  position: number,
-) {
-  // Get current ordering of target bucket excluding the task being moved
-  const inBucket = await db
-    .select({ id: tasks.id })
-    .from(tasks)
-    .where(
-      and(
-        targetBucket === null
-          ? isNull(tasks.bucket)
-          : eq(tasks.bucket, targetBucket),
-        eq(tasks.inFlight, false),
-        // Exclude done so it doesn't mix with active tasks ordering
-      ),
-    )
-    .orderBy(asc(tasks.bucketOrder));
-
-  const ids = inBucket.map((r) => r.id).filter((id) => id !== taskId);
-  const clamped = Math.max(0, Math.min(position, ids.length));
-  ids.splice(clamped, 0, taskId);
-  await reorderBucket(targetBucket, ids);
 }
 
 // ---------- CERRAR SEMANA ----------
@@ -445,10 +423,13 @@ async function nextInFlightOrder(): Promise<number> {
 }
 
 async function nextBucketOrder(bucket: number | null): Promise<number> {
+  // El "fondo" del bucket es el max bucketOrder entre todas las tareas activas
+  // (no-done) del bucket — incluye in-flight, porque la vista de SB las muestra
+  // ordenadas junto al resto.
   const where =
     bucket === null
-      ? and(isNull(tasks.bucket), eq(tasks.inFlight, false))
-      : and(eq(tasks.bucket, bucket), eq(tasks.inFlight, false));
+      ? and(isNull(tasks.bucket), ne(tasks.estado, "done"))
+      : and(eq(tasks.bucket, bucket), ne(tasks.estado, "done"));
   const [row] = await db
     .select({ max: sql<number>`coalesce(max(${tasks.bucketOrder}), 0)` })
     .from(tasks)

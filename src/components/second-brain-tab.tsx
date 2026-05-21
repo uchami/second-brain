@@ -25,10 +25,7 @@ import { CerrarSemanaDialog } from "@/components/cerrar-semana-dialog";
 import { bucketLabel } from "@/lib/buckets";
 
 const PERMANENT_BUCKETS = [0, 1, 2, 3];
-import {
-  moveTaskToBucketPosition,
-  reorderBucket,
-} from "@/app/actions";
+import { reorderBucket, updateTask } from "@/app/actions";
 import type { Responsable, Task } from "@/db/schema";
 
 type BucketKey = string; // "bucket:0" | "bucket:none" | "bucket:1" | "done" | "logradas"
@@ -124,12 +121,18 @@ export function SecondBrainTab({
       key: "bucket:0",
     });
   }
-  sections.push({
+  const sinDefinirCount = grouped.bucketMap.get(null)?.length ?? 0;
+  const sinDefinirSection: Section = {
     kind: "bucket",
     bucket: null,
     title: bucketLabel(null),
     key: "bucket:none",
-  });
+  };
+  // Sin definir va arriba si tiene tareas; si está vacío, al fondo (después
+  // de los buckets numerados) para no estorbar.
+  if (sinDefinirCount > 0) {
+    sections.push(sinDefinirSection);
+  }
   for (const n of grouped.bucketNumbers) {
     if (n === 0) continue;
     sections.push({
@@ -138,6 +141,9 @@ export function SecondBrainTab({
       title: bucketLabel(n),
       key: `bucket:${n}`,
     });
+  }
+  if (sinDefinirCount === 0) {
+    sections.push(sinDefinirSection);
   }
   sections.push({ kind: "done", key: "done" });
   sections.push({ kind: "logradas", key: "logradas" });
@@ -225,46 +231,14 @@ export function SecondBrainTab({
         reorderBucket(targetBucket, ids).catch((err) => toast.error(err.message));
       });
     } else {
-      // Cross-bucket: always append to the end of the target bucket
-      const targetArr = grouped.bucketMap.get(targetBucket) ?? [];
+      // Cross-bucket: misma ruta que quick-bucket — manda al fondo del destino.
       startTransition(() => {
-        moveTaskToBucketPosition(taskId, targetBucket, targetArr.length).catch(
-          (err) => toast.error(err.message),
+        updateTask({ id: taskId, bucket: targetBucket }).catch((err) =>
+          toast.error(err.message),
         );
       });
     }
   }
-
-  // Mobile reorder
-  function moveUp(taskId: number, key: string) {
-    const parsed = parseBucketKey(key);
-    if (parsed === "done" || parsed === "logradas") return;
-    const arr = grouped.bucketMap.get(parsed as number | null) ?? [];
-    const idx = arr.findIndex((t) => t.id === taskId);
-    if (idx <= 0) return;
-    const ids = arr.map((t) => t.id);
-    [ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]];
-    startTransition(() => {
-      reorderBucket(parsed as number | null, ids).catch((err) =>
-        toast.error(err.message),
-      );
-    });
-  }
-  function moveDown(taskId: number, key: string) {
-    const parsed = parseBucketKey(key);
-    if (parsed === "done" || parsed === "logradas") return;
-    const arr = grouped.bucketMap.get(parsed as number | null) ?? [];
-    const idx = arr.findIndex((t) => t.id === taskId);
-    if (idx === -1 || idx >= arr.length - 1) return;
-    const ids = arr.map((t) => t.id);
-    [ids[idx + 1], ids[idx]] = [ids[idx], ids[idx + 1]];
-    startTransition(() => {
-      reorderBucket(parsed as number | null, ids).catch((err) =>
-        toast.error(err.message),
-      );
-    });
-  }
-
 
   return (
     <div className="space-y-4">
@@ -299,24 +273,27 @@ export function SecondBrainTab({
                 activeBucketKey !== null &&
                 activeBucketKey !== s.key;
               const collapsed = !!collapsedBuckets[s.key];
+              const isSinDefinir = s.bucket === null;
+              const urgencyTier = isSinDefinir
+                ? tasksInBucket.length >= 5
+                  ? "alarm"
+                  : tasksInBucket.length > 3
+                    ? "warn"
+                    : undefined
+                : undefined;
               return (
                 <SBBucket
                   key={s.key}
                   id={s.key}
                   title={s.title}
-                  subtitle={
-                    collapsed && tasksInBucket.length > 0
-                      ? `${tasksInBucket.length}`
-                      : undefined
-                  }
+                  count={tasksInBucket.length}
                   taskIds={tasksInBucket.map((t) => t.id)}
                   tasks={tasksInBucket}
                   responsables={responsables}
                   isBucketZero={s.bucket === 0}
+                  urgencyTier={urgencyTier}
                   onClickTask={(t) => setEditing(t)}
                   onChangeBucket={(t) => setQuickBucketTask(t)}
-                  onMoveUp={moveUp}
-                  onMoveDown={moveDown}
                   onAddTask={() => setCreating({ bucket: s.bucket })}
                   highlight={isOtherBucketHover}
                   collapsible
@@ -332,17 +309,12 @@ export function SecondBrainTab({
                   key="done"
                   id="done"
                   title="Done"
-                  subtitle={
-                    collapsed && grouped.done.length > 0
-                      ? `${grouped.done.length} · esta semana`
-                      : "esta semana"
-                  }
+                  count={grouped.done.length}
+                  subtitle="esta semana"
                   taskIds={grouped.done.map((t) => t.id)}
                   tasks={grouped.done}
                   responsables={responsables}
                   onClickTask={(t) => setEditing(t)}
-                  onMoveUp={() => {}}
-                  onMoveDown={() => {}}
                   collapsible
                   collapsed={collapsed}
                   onToggleCollapse={() => toggleBucket("done")}

@@ -5,25 +5,27 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SortableTask } from "@/components/sortable-task";
 import type { TaskHighlightTier } from "@/components/task-card";
 import type { Responsable, Task } from "@/db/schema";
 
+export type BucketUrgencyTier = "warn" | "alarm";
+
 export function SBBucket({
   id,
   title,
   subtitle,
+  count,
   taskIds,
   tasks,
   responsables,
   isBucketZero,
+  urgencyTier,
   onClickTask,
   onChangeBucket,
-  onMoveUp,
-  onMoveDown,
   onAddTask,
   collapsible,
   collapsed,
@@ -33,14 +35,14 @@ export function SBBucket({
   id: string;
   title: string;
   subtitle?: string;
+  count?: number;
   taskIds: number[];
   tasks: Task[];
   responsables: Responsable[];
   isBucketZero?: boolean;
+  urgencyTier?: BucketUrgencyTier;
   onClickTask: (task: Task) => void;
   onChangeBucket?: (task: Task) => void;
-  onMoveUp: (taskId: number, bucketKey: string) => void;
-  onMoveDown: (taskId: number, bucketKey: string) => void;
   onAddTask?: () => void;
   collapsible?: boolean;
   collapsed?: boolean;
@@ -52,29 +54,81 @@ export function SBBucket({
     .map((id) => tasks.find((t) => t.id === id))
     .filter((t): t is Task => !!t);
 
+  const isAlarm = urgencyTier === "alarm";
+
   return (
-    <div className="space-y-2">
+    <div
+      className={cn(
+        "space-y-2 rounded-2xl border p-3 transition-colors",
+        urgencyTier === "warn" &&
+          "border-amber-300 bg-amber-100/70 dark:border-amber-700 dark:bg-amber-950/40",
+        urgencyTier === "alarm" &&
+          "border-red-600 bg-red-500 dark:border-red-500 dark:bg-red-600",
+        !urgencyTier &&
+          "border-neutral-200 bg-neutral-50/40 dark:border-neutral-800 dark:bg-neutral-950/30",
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          className="flex items-center gap-2 text-left"
+          className="flex flex-1 items-center gap-2 text-left"
           onClick={onToggleCollapse}
           disabled={!collapsible}
         >
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
+          <h3
+            className={cn(
+              "text-sm font-semibold uppercase tracking-wide",
+              isAlarm
+                ? "text-white"
+                : "text-neutral-600 dark:text-neutral-400",
+            )}
+          >
             {title}
           </h3>
+          {count !== undefined && (
+            <span
+              className={cn(
+                "text-xs font-medium tabular-nums",
+                isAlarm ? "text-white/90" : "text-neutral-400",
+              )}
+            >
+              {count}
+            </span>
+          )}
           {subtitle && (
-            <span className="text-xs text-neutral-400">{subtitle}</span>
+            <span
+              className={cn(
+                "text-xs",
+                isAlarm ? "text-white/80" : "text-neutral-400",
+              )}
+            >
+              {subtitle}
+            </span>
           )}
           {collapsible && (
-            <span className="text-xs text-neutral-400">
-              {collapsed ? "▸" : "▾"}
+            <span
+              className={cn(
+                "ml-0.5 inline-flex",
+                isAlarm ? "text-white" : "text-neutral-500",
+              )}
+              aria-hidden
+            >
+              {collapsed ? (
+                <ChevronRight size={20} strokeWidth={2.5} />
+              ) : (
+                <ChevronDown size={20} strokeWidth={2.5} />
+              )}
             </span>
           )}
         </button>
         {onAddTask && !collapsed && (
-          <Button variant="ghost" size="icon" onClick={onAddTask} aria-label="Agregar tarea">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onAddTask}
+            aria-label="Agregar tarea"
+            className={isAlarm ? "text-white hover:bg-white/10" : undefined}
+          >
             <Plus size={14} />
           </Button>
         )}
@@ -93,7 +147,14 @@ export function SBBucket({
             strategy={verticalListSortingStrategy}
           >
             {itemTasks.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-neutral-200 px-3 py-2 text-xs text-neutral-400 dark:border-neutral-800">
+              <div
+                className={cn(
+                  "rounded-lg border border-dashed px-3 py-2 text-xs",
+                  isAlarm
+                    ? "border-white/40 text-white/80"
+                    : "border-neutral-200 text-neutral-400 dark:border-neutral-800",
+                )}
+              >
                 Sin tareas
               </div>
             ) : (
@@ -116,10 +177,6 @@ export function SBBucket({
                     onChangeBucket={
                       onChangeBucket ? () => onChangeBucket(task) : undefined
                     }
-                    onMoveUp={() => onMoveUp(task.id, id)}
-                    onMoveDown={() => onMoveDown(task.id, id)}
-                    canMoveUp={i > 0}
-                    canMoveDown={i < itemTasks.length - 1}
                   />
                 );
               })

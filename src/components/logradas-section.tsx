@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { TaskCard } from "@/components/task-card";
 import { startOfWeekMonday } from "@/lib/eta";
 import type { Responsable, Task } from "@/db/schema";
@@ -78,8 +79,12 @@ export function LogradasSection({
         <span className="text-xs text-neutral-400">
           {tasks.length} histórico
         </span>
-        <span className="text-xs text-neutral-400">
-          {collapsed ? "▸" : "▾"}
+        <span className="ml-0.5 inline-flex text-neutral-500" aria-hidden>
+          {collapsed ? (
+            <ChevronRight size={20} strokeWidth={2.5} />
+          ) : (
+            <ChevronDown size={20} strokeWidth={2.5} />
+          )}
         </span>
       </button>
 

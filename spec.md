@@ -69,7 +69,7 @@ Tres tablas, todas en `src/db/schema.ts`:
 - Cada card lleva un **badge de posición**: `Importante · 1/6`, `Sin definir · 1/9`, etc. El total es sobre todas las tareas activas del bucket (no solo las in-flight).
 - **Banner rojo** abajo si existe una top-1 de Importante (bucket 0) que NO está en in-flight. Muestra el título. Desaparece automáticamente cuando promovés la tarea, la marcás done, o la sacás del bucket 0.
 - Para **marcar done**: checkbox de la card. Eso setea `estado=done`, `in_flight=false`, `done_at=now()`. La tarea pasa al bucket "Done" del SB.
-- **Mandar al SB**: ícono avioncito ✈ abre `MoveToSBDialog` para elegir bucket.
+- **Mandar al SB**: ícono avioncito ✈ saca la tarea de in-flight (un solo tap, sin diálogo). La tarea queda en el mismo bucket y posición donde ya estaba — no se mueve al final.
 
 ### Highlights del bucket 0
 
@@ -80,6 +80,10 @@ Solo aplican al bucket 0 (`Importante`). Sirven para ver de un vistazo qué es l
 - **#5+**: blanco normal.
 
 El mismo color se aplica en in-flight si la tarea en in-flight es la top-1 o 2-4 del bucket 0. La lógica se calcula en `InFlightTab.tierFor()` y se pasa al `TaskCard` vía la prop `highlightTier`.
+
+### Editar tarea
+
+- `updateTask()` solo resetea `bucket_order` cuando el bucket realmente cambia. Si editás otra cosa (ETA, título, estado), la tarea se queda en su posición actual. Solo moverla de bucket (vía edit form o quick bucket dialog) la manda al final del bucket destino.
 
 ### ETA
 
@@ -178,7 +182,6 @@ Todos los buckets (incluyendo Done) tienen chevron `▸/▾`. State local a `Sec
 - `src/components/sortable-task.tsx` — wrapper @dnd-kit alrededor de TaskCard.
 - `src/components/task-card.tsx` — el card visual. Tiene MUCHAS props porque se usa en in-flight, SB y Logradas (contexto cambia los íconos visibles y el estilo).
 - `src/components/task-form-dialog.tsx` — modal create/edit. Maneja título, detalle, responsable, estado, bucket, ETA.
-- `src/components/move-to-sb-dialog.tsx` — modal "mandar al SB" desde in-flight.
 - `src/components/quick-bucket-dialog.tsx` — modal de cambio rápido de bucket.
 - `src/components/cerrar-semana-dialog.tsx` — preview + confirm del cierre.
 - `src/components/lograda-info-dialog.tsx` — read-only de Lograda.
@@ -192,7 +195,7 @@ Todos los buckets (incluyendo Done) tienen chevron `▸/▾`. State local a `Sec
 - Viewport meta tag con `maximumScale=1, userScalable=false` (es una app, no una página).
 - Inputs con `font-size: 16px` en mobile para evitar el zoom de iOS al enfocar.
 - Dialog ancho `calc(100% - 1.5rem)` para no overflow en 375px.
-- Drag handle visible solo en `sm:` (desktop); en mobile no hay reorder en SB (los botones ↑↓ tampoco están en in-flight desde el cambio reciente, solo en SB).
+- Drag handle visible siempre (desktop y mobile). El handle tiene `touch-none` para que el pointer event inicie drag inmediato sobre touch en lugar de scrollear. Los botones ↑↓ ya no existen — D&D es el único camino para reordenar.
 
 ### Convenciones de copy
 
