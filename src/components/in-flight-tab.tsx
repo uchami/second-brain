@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TaskCard, type TaskHighlightTier } from "@/components/task-card";
 import { TaskFormDialog } from "@/components/task-form-dialog";
-import { moveToSecondBrain } from "@/app/actions";
+import { markDone, moveToSecondBrain, unmarkDone } from "@/app/actions";
 import { bucketLabel } from "@/lib/buckets";
 import type { Responsable, Task } from "@/db/schema";
 
 const IN_FLIGHT_LIMIT = 6;
+// How long the "¡Logrado!" celebration runs before the server actually
+// gets called. Long enough to feel rewarding, short enough to not annoy.
+const CELEBRATION_MS = 1600;
 
 /**
  * Sort key: bucket 0 first, then null (Sin definir), then 1, 2, 3...
@@ -22,6 +25,21 @@ function bucketSortKey(b: number | null): number {
   return b;
 }
 
+type OptimisticAction = { type: "toggleDone"; taskId: number; done: boolean };
+
+function applyOptimistic(tasks: Task[], a: OptimisticAction): Task[] {
+  if (a.type === "toggleDone") {
+    return tasks.map((t) =>
+      t.id === a.taskId
+        ? a.done
+          ? { ...t, estado: "done", doneAt: t.doneAt ?? new Date() }
+          : { ...t, estado: "pendiente", doneAt: null }
+        : t,
+    );
+  }
+  return tasks;
+}
+
 export function InFlightTab({
   tasks,
   responsables,
@@ -31,8 +49,12 @@ export function InFlightTab({
   responsables: Responsable[];
   existingBuckets: number[];
 }) {
+  const [optimisticTasks, addOptimistic] = useOptimistic(tasks, applyOptimistic);
+
   // Active (non-done) tasks grouped by bucket — used for both the position
   // badge ("1/7") and to find bucket 0's top for the warning banner.
+  // We use the SERVER tasks (not optimistic) for the badge/banner so that an
+  // optimistic "done" doesn't flicker the bucket counts mid-flight.
   const bucketPositions = new Map<number, { label: string; position: number; total: number }>();
   const byBucket = new Map<number | null, Task[]>();
   for (const t of tasks) {
@@ -52,8 +74,10 @@ export function InFlightTab({
     });
   }
 
-  // In-flight, sorted by (bucket sort key, bucket_order)
-  const inFlight = tasks
+  // In-flight, sorted by (bucket sort key, bucket_order). Reads from
+  // optimisticTasks so a "done" tick keeps the card in place with strike-
+  // through until the server roundtrip removes it from in-flight.
+  const inFlight = optimisticTasks
     .filter((t) => t.inFlight)
     .sort((a, b) => {
       const ka = bucketSortKey(a.bucket);
@@ -64,6 +88,13 @@ export function InFlightTab({
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [celebratingIds, setCelebratingIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => () => {
+    for (const t of timersRef.current.values()) clearTimeout(t);
+  }, []);
   const [, startTransition] = useTransition();
 
   function handleSendToSB(taskId: number) {
@@ -73,6 +104,48 @@ export function InFlightTab({
         toast.success("Tarea mandada al second brain");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error");
+      }
+    });
+  }
+
+  function handleToggleDone(taskId: number, next: boolean) {
+    if (!next) {
+      startTransition(async () => {
+        addOptimistic({ type: "toggleDone", taskId, done: false });
+        try {
+          await unmarkDone(taskId);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Error");
+        }
+      });
+      return;
+    }
+    // Celebrate first, then actually mark done. The optimistic state keeps
+    // the card visible (with stamp + confetti) while the timer runs.
+    setCelebratingIds((s) => {
+      const n = new Set(s);
+      n.add(taskId);
+      return n;
+    });
+    startTransition(async () => {
+      addOptimistic({ type: "toggleDone", taskId, done: true });
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          timersRef.current.delete(taskId);
+          resolve();
+        }, CELEBRATION_MS);
+        timersRef.current.set(taskId, t);
+      });
+      try {
+        await markDone(taskId);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error");
+      } finally {
+        setCelebratingIds((s) => {
+          const n = new Set(s);
+          n.delete(taskId);
+          return n;
+        });
       }
     });
   }
@@ -129,6 +202,8 @@ export function InFlightTab({
               bucketBadge={bucketPositions.get(task.id)}
               onClickTask={() => setEditing(task)}
               onSendToSB={() => handleSendToSB(task.id)}
+              onToggleDone={(next) => handleToggleDone(task.id, next)}
+              celebrating={celebratingIds.has(task.id)}
             />
           ))}
         </div>

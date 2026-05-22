@@ -26,6 +26,8 @@ export function SBBucket({
   urgencyTier,
   onClickTask,
   onChangeBucket,
+  onToggleDone,
+  celebratingIds,
   onAddTask,
   collapsible,
   collapsed,
@@ -43,6 +45,8 @@ export function SBBucket({
   urgencyTier?: BucketUrgencyTier;
   onClickTask: (task: Task) => void;
   onChangeBucket?: (task: Task) => void;
+  onToggleDone?: (taskId: number, next: boolean) => void;
+  celebratingIds?: Set<number>;
   onAddTask?: () => void;
   collapsible?: boolean;
   collapsed?: boolean;
@@ -177,6 +181,12 @@ export function SBBucket({
                     onChangeBucket={
                       onChangeBucket ? () => onChangeBucket(task) : undefined
                     }
+                    onToggleDone={
+                      onToggleDone
+                        ? (next) => onToggleDone(task.id, next)
+                        : undefined
+                    }
+                    celebrating={celebratingIds?.has(task.id)}
                   />
                 );
               })

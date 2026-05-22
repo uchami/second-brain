@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { CheckCheck } from "lucide-react";
 import {
@@ -25,7 +25,8 @@ import { CerrarSemanaDialog } from "@/components/cerrar-semana-dialog";
 import { bucketLabel } from "@/lib/buckets";
 
 const PERMANENT_BUCKETS = [0, 1, 2, 3];
-import { reorderBucket, updateTask } from "@/app/actions";
+const CELEBRATION_MS = 1600;
+import { markDone, reorderBucket, unmarkDone, updateTask } from "@/app/actions";
 import type { Responsable, Task } from "@/db/schema";
 
 type BucketKey = string; // "bucket:0" | "bucket:none" | "bucket:1" | "done" | "logradas"
@@ -41,6 +42,52 @@ function parseBucketKey(key: BucketKey): number | null | "done" | "logradas" {
   return Number(key.replace("bucket:", ""));
 }
 
+type OptimisticAction =
+  | { type: "reorder"; bucket: number | null; ids: number[] }
+  | { type: "move"; taskId: number; toBucket: number | null }
+  | { type: "toggleDone"; taskId: number; done: boolean };
+
+function applyOptimistic(tasks: Task[], a: OptimisticAction): Task[] {
+  switch (a.type) {
+    case "reorder": {
+      const orderMap = new Map<number, number>();
+      a.ids.forEach((id, i) => orderMap.set(id, (i + 1) * 100));
+      return tasks.map((t) => {
+        const next = orderMap.get(t.id);
+        if (next === undefined) return t;
+        return { ...t, bucket: a.bucket, bucketOrder: next };
+      });
+    }
+    case "move": {
+      let maxOrder = 0;
+      for (const t of tasks) {
+        if (
+          t.id !== a.taskId &&
+          t.bucket === a.toBucket &&
+          t.estado !== "done" &&
+          t.bucketOrder > maxOrder
+        ) {
+          maxOrder = t.bucketOrder;
+        }
+      }
+      return tasks.map((t) =>
+        t.id === a.taskId
+          ? { ...t, bucket: a.toBucket, bucketOrder: maxOrder + 100 }
+          : t,
+      );
+    }
+    case "toggleDone": {
+      return tasks.map((t) =>
+        t.id === a.taskId
+          ? a.done
+            ? { ...t, estado: "done", doneAt: t.doneAt ?? new Date() }
+            : { ...t, estado: "pendiente", doneAt: null }
+          : t,
+      );
+    }
+  }
+}
+
 export function SecondBrainTab({
   tasks,
   responsables,
@@ -48,6 +95,11 @@ export function SecondBrainTab({
   tasks: Task[];
   responsables: Responsable[];
 }) {
+  const [optimisticTasks, addOptimistic] = useOptimistic(
+    tasks,
+    applyOptimistic,
+  );
+
   const [showLogradas, setShowLogradas] = useState(false);
   const [collapsedBuckets, setCollapsedBuckets] = useState<
     Record<string, boolean>
@@ -65,18 +117,37 @@ export function SecondBrainTab({
   const [activeBucketKey, setActiveBucketKey] = useState<BucketKey | null>(
     null,
   );
+  const [celebratingIds, setCelebratingIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+  useEffect(() => () => {
+    for (const t of timersRef.current.values()) clearTimeout(t);
+  }, []);
   const [, startTransition] = useTransition();
 
-  // Group tasks into buckets/done/logradas
+  // Group tasks into buckets/done/logradas.
+  // Tasks currently celebrating stay in their source bucket even though their
+  // optimistic estado is "done" — that way the stamp/confetti animate in place
+  // instead of teleporting the card to the Done section out of view.
   const grouped = useMemo(() => {
-    const active = tasks.filter((t) => t.estado !== "done");
-    const done = tasks
-      .filter((t) => t.estado === "done" && t.closedWeekAt === null)
+    const active = optimisticTasks.filter(
+      (t) => t.estado !== "done" || celebratingIds.has(t.id),
+    );
+    const done = optimisticTasks
+      .filter(
+        (t) =>
+          t.estado === "done" &&
+          t.closedWeekAt === null &&
+          !celebratingIds.has(t.id),
+      )
       .sort(
         (a, b) =>
           (b.doneAt?.getTime() ?? 0) - (a.doneAt?.getTime() ?? 0),
       );
-    const logradas = tasks
+    const logradas = optimisticTasks
       .filter((t) => t.estado === "done" && t.closedWeekAt !== null)
       .sort(
         (a, b) =>
@@ -102,7 +173,7 @@ export function SecondBrainTab({
       .sort((a, b) => a - b);
 
     return { bucketMap, bucketNumbers, done, logradas };
-  }, [tasks]);
+  }, [optimisticTasks]);
 
   const existingBuckets = grouped.bucketNumbers;
 
@@ -227,17 +298,65 @@ export function SecondBrainTab({
       if (srcIdx === dropIdx) return;
       ids.splice(srcIdx, 1);
       ids.splice(dropIdx, 0, taskId);
-      startTransition(() => {
-        reorderBucket(targetBucket, ids).catch((err) => toast.error(err.message));
+      startTransition(async () => {
+        addOptimistic({ type: "reorder", bucket: targetBucket, ids });
+        try {
+          await reorderBucket(targetBucket, ids);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Error");
+        }
       });
     } else {
       // Cross-bucket: misma ruta que quick-bucket — manda al fondo del destino.
-      startTransition(() => {
-        updateTask({ id: taskId, bucket: targetBucket }).catch((err) =>
-          toast.error(err.message),
-        );
+      startTransition(async () => {
+        addOptimistic({ type: "move", taskId, toBucket: targetBucket });
+        try {
+          await updateTask({ id: taskId, bucket: targetBucket });
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Error");
+        }
       });
     }
+  }
+
+  function handleToggleDone(taskId: number, next: boolean) {
+    if (!next) {
+      startTransition(async () => {
+        addOptimistic({ type: "toggleDone", taskId, done: false });
+        try {
+          await unmarkDone(taskId);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Error");
+        }
+      });
+      return;
+    }
+    setCelebratingIds((s) => {
+      const n = new Set(s);
+      n.add(taskId);
+      return n;
+    });
+    startTransition(async () => {
+      addOptimistic({ type: "toggleDone", taskId, done: true });
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          timersRef.current.delete(taskId);
+          resolve();
+        }, CELEBRATION_MS);
+        timersRef.current.set(taskId, t);
+      });
+      try {
+        await markDone(taskId);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error");
+      } finally {
+        setCelebratingIds((s) => {
+          const n = new Set(s);
+          n.delete(taskId);
+          return n;
+        });
+      }
+    });
   }
 
   return (
@@ -294,6 +413,8 @@ export function SecondBrainTab({
                   urgencyTier={urgencyTier}
                   onClickTask={(t) => setEditing(t)}
                   onChangeBucket={(t) => setQuickBucketTask(t)}
+                  onToggleDone={handleToggleDone}
+                  celebratingIds={celebratingIds}
                   onAddTask={() => setCreating({ bucket: s.bucket })}
                   highlight={isOtherBucketHover}
                   collapsible
@@ -315,6 +436,8 @@ export function SecondBrainTab({
                   tasks={grouped.done}
                   responsables={responsables}
                   onClickTask={(t) => setEditing(t)}
+                  onToggleDone={handleToggleDone}
+                  celebratingIds={celebratingIds}
                   collapsible
                   collapsed={collapsed}
                   onToggleCollapse={() => toggleBucket("done")}

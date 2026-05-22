@@ -10,6 +10,7 @@ import {
   StickyNote,
   Trophy,
   FolderInput,
+  PartyPopper,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { etaColor, formatEtaShort } from "@/lib/eta";
@@ -71,6 +72,8 @@ export function TaskCard({
   onClickTask,
   onSendToSB,
   onChangeBucket,
+  onToggleDone,
+  celebrating,
   showReorder,
   // drag handle attributes (from @dnd-kit sortable)
   dragHandleProps,
@@ -84,6 +87,10 @@ export function TaskCard({
   onClickTask?: () => void;
   onSendToSB?: () => void;
   onChangeBucket?: () => void;
+  // When provided, the parent owns the toggle (e.g. to apply optimistic
+  // state); otherwise TaskCard falls back to calling the action directly.
+  onToggleDone?: (next: boolean) => void;
+  celebrating?: boolean;
   showReorder?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
   isDragging?: boolean;
@@ -93,6 +100,10 @@ export function TaskCard({
   const isLograda = context === "logradas";
 
   function toggleDone(next: boolean) {
+    if (onToggleDone) {
+      onToggleDone(next);
+      return;
+    }
     startTransition(async () => {
       try {
         if (next) {
@@ -124,7 +135,7 @@ export function TaskCard({
       className={cn(
         "group relative flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-3 transition-shadow hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900",
         isDragging && "opacity-50",
-        isDone && !isLograda && "opacity-70",
+        isDone && !isLograda && !celebrating && "opacity-70",
         isLograda &&
           "border-emerald-100 bg-emerald-50/40 dark:border-emerald-950/50 dark:bg-emerald-950/10",
         !isLograda &&
@@ -133,8 +144,11 @@ export function TaskCard({
         !isLograda &&
           highlightTier === "near-top" &&
           "border-sky-100 bg-sky-50/50 dark:border-sky-950 dark:bg-sky-950/10",
+        celebrating &&
+          "sb-celebrating border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30",
       )}
     >
+      {celebrating && <CelebrationOverlay />}
       {/* Drag handle */}
       {showReorder && !isLograda && (
         <button
@@ -269,5 +283,44 @@ export function TaskCard({
         )}
       </div>
     </div>
+  );
+}
+
+const CONFETTI_EMOJIS = ["🎉", "🏆", "⭐", "✨", "💪", "🔥", "🎊", "🌟"];
+
+function CelebrationOverlay() {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+        <div className="sb-celebrating-stamp inline-flex items-center gap-1.5 rounded-md border-[3px] border-emerald-600/80 bg-emerald-50/95 px-3 py-1 text-base font-black uppercase tracking-widest text-emerald-700 shadow-md dark:border-emerald-500/80 dark:bg-emerald-950/80 dark:text-emerald-300">
+          <PartyPopper size={16} strokeWidth={2.5} />
+          ¡Logrado!
+        </div>
+      </div>
+      <div className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+        {CONFETTI_EMOJIS.map((emoji, i) => {
+          const angle = (i / CONFETTI_EMOJIS.length) * Math.PI * 2;
+          const radius = 90;
+          const dx = Math.cos(angle) * radius;
+          const dy = Math.sin(angle) * radius - 30; // bias upward
+          return (
+            <span
+              key={i}
+              className="sb-celebrating-confetti absolute left-1/2 top-1/2 text-lg leading-none"
+              style={
+                {
+                  "--sb-dx": `${dx}px`,
+                  "--sb-dy": `${dy}px`,
+                  animationDelay: `${i * 35}ms`,
+                } as React.CSSProperties
+              }
+              aria-hidden
+            >
+              {emoji}
+            </span>
+          );
+        })}
+      </div>
+    </>
   );
 }

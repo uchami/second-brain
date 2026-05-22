@@ -48,3 +48,46 @@ body {
 [data-dnd-handle]:active {
   cursor: grabbing;
 }
+
+/* "¡Logrado!" celebration when a task gets marked done. */
+@keyframes sb-stamp-in {
+  0% { opacity: 0; transform: scale(2.6) rotate(-30deg); }
+  55% { opacity: 1; transform: scale(0.86) rotate(-11deg); }
+  72% { transform: scale(1.06) rotate(-9deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-10deg); }
+}
+
+@keyframes sb-stamp-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.92) rotate(-10deg); }
+}
+
+@keyframes sb-confetti {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
+  10% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform:
+      translate(calc(-50% + var(--sb-dx)), calc(-50% + var(--sb-dy))) scale(1.05) rotate(720deg);
+  }
+}
+
+@keyframes sb-card-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  30% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.25); }
+  60% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+}
+
+.sb-celebrating {
+  animation: sb-card-glow 1800ms ease-out forwards;
+}
+
+.sb-celebrating-stamp {
+  animation:
+    sb-stamp-in 520ms cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards,
+    sb-stamp-fade 1800ms ease-out forwards;
+}
+
+.sb-celebrating-confetti {
+  animation: sb-confetti 1500ms ease-out forwards;
+}

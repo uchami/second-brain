@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Settings, LogOut } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Loader2, Settings, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -22,6 +22,25 @@ const SecondBrainTab = dynamic(
   { ssr: false },
 );
 
+// Polling interval for the version probe (ms). Tab/window focus and
+// visibility changes also trigger an immediate check, which is what mostly
+// catches the "edited on phone, switched to laptop" case.
+const POLL_INTERVAL_MS = 30_000;
+
+function computeVersion(tasks: Task[], responsables: Responsable[]): string {
+  let tMax = 0;
+  for (const t of tasks) {
+    const v = t.updatedAt?.getTime() ?? 0;
+    if (v > tMax) tMax = v;
+  }
+  let rMax = 0;
+  for (const r of responsables) {
+    const v = r.createdAt?.getTime() ?? 0;
+    if (v > rMax) rMax = v;
+  }
+  return `${tMax}-${tasks.length}-${rMax}-${responsables.length}`;
+}
+
 export function AppShell({
   tasks,
   responsables,
@@ -31,6 +50,7 @@ export function AppShell({
 }) {
   const [tab, setTab] = useState<"inflight" | "sb">("inflight");
   const router = useRouter();
+  const [isRefreshing, startRefresh] = useTransition();
 
   const existingBuckets = useMemo(() => {
     const s = new Set<number>([0, 1, 2, 3]); // permanent buckets
@@ -39,6 +59,42 @@ export function AppShell({
     }
     return [...s].sort((a, b) => a - b);
   }, [tasks]);
+
+  const currentVersion = useMemo(
+    () => computeVersion(tasks, responsables),
+    [tasks, responsables],
+  );
+  const currentVersionRef = useRef(currentVersion);
+  useEffect(() => {
+    currentVersionRef.current = currentVersion;
+  }, [currentVersion]);
+
+  const checkVersion = useCallback(async () => {
+    try {
+      const res = await fetch("/api/version", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { v: string };
+      if (data.v && data.v !== currentVersionRef.current) {
+        startRefresh(() => router.refresh());
+      }
+    } catch {
+      // Network blip — next tick will retry
+    }
+  }, [router]);
+
+  useEffect(() => {
+    const interval = setInterval(checkVersion, POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") checkVersion();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", checkVersion);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", checkVersion);
+    };
+  }, [checkVersion]);
 
   async function logout() {
     await fetch("/api/logout", { method: "POST" });
@@ -88,6 +144,24 @@ export function AppShell({
           <SecondBrainTab tasks={tasks} responsables={responsables} />
         </TabsContent>
       </Tabs>
+
+      {isRefreshing && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-lg dark:bg-neutral-900">
+            <Loader2
+              size={18}
+              className="animate-spin text-neutral-600 dark:text-neutral-300"
+            />
+            <span className="text-sm text-neutral-700 dark:text-neutral-200">
+              Sincronizando…
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
