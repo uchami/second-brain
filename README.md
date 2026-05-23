@@ -24,20 +24,14 @@ docker run -d --name secondbrain-pg \
 
 ### 2. Variables de entorno
 
-Copia `.env.local.example` a `.env.local` y completa:
-
-```
-DATABASE_URL=postgres://postgres:postgres@localhost:5433/secondbrain
-APP_PIN=1234
-SESSION_SECRET=$(openssl rand -hex 32)
-```
+Copia `.env.local.example` a `.env.local` y completa con tus credenciales de WorkOS AuthKit. Creá una app en https://dashboard.workos.com y configurá el redirect URI a `http://localhost:3000/callback`.
 
 ### 3. Migrar la base y sembrar responsables
 
 ```sh
 npm install
 npm run db:migrate
-npm run db:seed
+USER_ID=<tu-workos-user-id> npm run db:seed   # opcional
 ```
 
 ### 4. Levantar
@@ -46,7 +40,7 @@ npm run db:seed
 npm run dev
 ```
 
-Abrí http://localhost:3000 e ingresá el PIN.
+Abrí http://localhost:3000 — te redirige al login hosted de WorkOS.
 
 ## Deploy a Vercel + Neon (gratis)
 
@@ -55,14 +49,25 @@ Abrí http://localhost:3000 e ingresá el PIN.
 3. **Importar a Vercel**: https://vercel.com/new → seleccioná el repo.
 4. **Env vars en Vercel**:
    - `DATABASE_URL` = connection string de Neon
-   - `APP_PIN` = tu PIN
-   - `SESSION_SECRET` = `openssl rand -hex 32`
+   - `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `WORKOS_COOKIE_PASSWORD`, `NEXT_PUBLIC_WORKOS_REDIRECT_URI` (apuntando a `https://<vercel-domain>/callback`)
 5. **Aplicar migraciones a Neon** desde local:
    ```sh
    DATABASE_URL="<neon-url>" npm run db:migrate
-   DATABASE_URL="<neon-url>" npm run db:seed
    ```
 6. **PWA en mobile**: abrí la URL de Vercel en Safari/Chrome → "Compartir" → "Añadir a pantalla de inicio".
+
+## Migración single-tenant → multi-tenant
+
+La migración `0003_multi_tenant.sql` agrega `user_id` a las tres tablas y rellena las filas existentes con el placeholder `legacy-owner`. Después de desplegar y loguearte con WorkOS por primera vez:
+
+1. Visitá `/api/whoami` para ver tu user id (`user_01H...`).
+2. Reasignar la data legacy a tu user:
+   ```sql
+   UPDATE tasks          SET user_id = 'user_01H...' WHERE user_id = 'legacy-owner';
+   UPDATE responsables   SET user_id = 'user_01H...' WHERE user_id = 'legacy-owner';
+   UPDATE cierres_semana SET user_id = 'user_01H...' WHERE user_id = 'legacy-owner';
+   ```
+3. Eliminar la ruta temporal `src/app/api/whoami/route.ts`.
 
 ## Scripts
 
@@ -75,10 +80,13 @@ Abrí http://localhost:3000 e ingresá el PIN.
 
 ## Modelo de datos
 
-- **responsables**: `id, nombre, color, orden`
+Todas las tablas tienen `user_id` (el id de WorkOS del dueño) y las queries siempre filtran por él. Ver `src/lib/auth.ts#requireUserId`.
+
+- **responsables**: `id, user_id, nombre, color, orden`
 - **tasks**:
-  - `titulo, responsable_id, estado` (pendiente | en_proceso | delegado | done)
+  - `user_id, titulo, responsable_id, estado` (pendiente | en_proceso | delegado | done)
   - `bucket` (null = "Sin definir") + `bucket_order`
   - `in_flight` (bool) + `in_flight_order`
   - `eta` (date) — el día de la semana se resuelve al más próximo en el cliente
   - `done_at`, `closed_week_at` — para distinguir Done de esta semana vs Logradas
+- **cierres_semana**: `user_id, cerrado_at, pendientes_antes, done_archivadas`

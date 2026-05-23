@@ -171,11 +171,19 @@ async function main() {
   }
 
   const { db } = await import("./client");
-  const { responsables, tasks } = await import("./schema");
+  const { responsables, tasks, LEGACY_USER_ID } = await import("./schema");
   const { eq } = await import("drizzle-orm");
 
+  // Target user for this import. Defaults to the legacy placeholder so
+  // pre-WorkOS imports keep working; pass USER_ID=user_xxx to import into a
+  // specific WorkOS user.
+  const userId = process.env.USER_ID ?? LEGACY_USER_ID;
+
   // Build/refresh responsable map (auto-create new ones)
-  const existing = await db.select().from(responsables);
+  const existing = await db
+    .select()
+    .from(responsables)
+    .where(eq(responsables.userId, userId));
   const respByName = new Map<string, number>();
   for (const r of existing) respByName.set(r.nombre, r.id);
 
@@ -188,6 +196,7 @@ async function main() {
       const [created] = await db
         .insert(responsables)
         .values({
+          userId,
           nombre: name,
           color: "#e5e7eb",
           orden: nextOrden++,
@@ -199,13 +208,16 @@ async function main() {
   }
 
   // Clear existing tasks (idempotent re-runs) — comment this out if you want to merge
-  const existingTasksCount = await db.select().from(tasks);
+  const existingTasksCount = await db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.userId, userId));
   if (existingTasksCount.length > 0) {
     console.log(
-      `⚠ La DB ya tiene ${existingTasksCount.length} tarea(s). Pasá --clear para borrarlas antes.`,
+      `⚠ La DB ya tiene ${existingTasksCount.length} tarea(s) para ${userId}. Pasá --clear para borrarlas antes.`,
     );
     if (process.argv.includes("--clear")) {
-      await db.delete(tasks);
+      await db.delete(tasks).where(eq(tasks.userId, userId));
       console.log("Tareas previas borradas");
     } else {
       console.log("Sumando al final sin tocar las existentes");
@@ -218,6 +230,7 @@ async function main() {
   for (const [bucket, arr] of byBucket) {
     arr.forEach((p, i) => {
       inserts.push({
+        userId,
         titulo: p.row.tarea,
         detalle: p.row.detalle || null,
         responsableId: p.row.responsable
@@ -236,6 +249,7 @@ async function main() {
   closedAt.setDate(closedAt.getDate() - 7);
   done.forEach((p, i) => {
     inserts.push({
+      userId,
       titulo: p.row.tarea,
       detalle: p.row.detalle || null,
       responsableId: p.row.responsable

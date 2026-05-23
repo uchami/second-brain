@@ -18,20 +18,31 @@ export const estadoEnum = pgEnum("estado", [
   "done",
 ]);
 
-export const responsables = pgTable("responsables", {
-  id: serial("id").primaryKey(),
-  nombre: text("nombre").notNull(),
-  color: text("color").notNull().default("#cccccc"),
-  orden: integer("orden").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+// Placeholder used by the multi-tenant migration to tag pre-existing,
+// single-tenant rows. After WorkOS login we manually UPDATE all rows with this
+// value to the real WorkOS user id.
+export const LEGACY_USER_ID = "legacy-owner";
+
+export const responsables = pgTable(
+  "responsables",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    nombre: text("nombre").notNull(),
+    color: text("color").notNull().default("#cccccc"),
+    orden: integer("orden").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("responsables_user_idx").on(t.userId, t.orden)],
+);
 
 export const tasks = pgTable(
   "tasks",
   {
     id: serial("id").primaryKey(),
+    userId: text("user_id").notNull(),
     titulo: text("titulo").notNull(),
     detalle: text("detalle"),
     responsableId: integer("responsable_id").references(() => responsables.id, {
@@ -56,22 +67,27 @@ export const tasks = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("tasks_in_flight_idx").on(t.inFlight, t.inFlightOrder),
-    index("tasks_bucket_idx").on(t.bucket, t.bucketOrder),
-    index("tasks_closed_week_idx").on(t.closedWeekAt),
+    index("tasks_user_in_flight_idx").on(t.userId, t.inFlight, t.inFlightOrder),
+    index("tasks_user_bucket_idx").on(t.userId, t.bucket, t.bucketOrder),
+    index("tasks_user_closed_week_idx").on(t.userId, t.closedWeekAt),
   ],
 );
 
-export const cierresSemana = pgTable("cierres_semana", {
-  id: serial("id").primaryKey(),
-  cerradoAt: timestamp("cerrado_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  // snapshot of active (non-done) tasks at the moment of closing,
-  // so the next "close week" preview can show the delta
-  pendientesAntes: integer("pendientes_antes").notNull(),
-  doneArchivadas: integer("done_archivadas").notNull(),
-});
+export const cierresSemana = pgTable(
+  "cierres_semana",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    cerradoAt: timestamp("cerrado_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // snapshot of active (non-done) tasks at the moment of closing,
+    // so the next "close week" preview can show the delta
+    pendientesAntes: integer("pendientes_antes").notNull(),
+    doneArchivadas: integer("done_archivadas").notNull(),
+  },
+  (t) => [index("cierres_semana_user_idx").on(t.userId, t.cerradoAt)],
+);
 
 export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;

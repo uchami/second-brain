@@ -1,34 +1,20 @@
-import { SignJWT, jwtVerify } from "jose";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 
-const COOKIE_NAME = "sb_session";
-const COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days
-
-function getSecret(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      "SESSION_SECRET is not set or is too short (need at least 32 chars)",
-    );
-  }
-  return new TextEncoder().encode(secret);
+/**
+ * Returns the current WorkOS user id, redirecting to sign-in if there is no
+ * active session. Every server action, page, and API route that touches
+ * tenant-scoped data MUST call this and pass the id into queries.
+ */
+export async function requireUserId(): Promise<string> {
+  const { user } = await withAuth({ ensureSignedIn: true });
+  return user.id;
 }
 
-export async function createSessionToken(): Promise<string> {
-  return await new SignJWT({ sub: "owner" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${COOKIE_MAX_AGE_SEC}s`)
-    .sign(getSecret());
+/**
+ * Returns the full WorkOS user (id + email + name fields). Same redirect
+ * behaviour as requireUserId. Use only when you need fields beyond the id.
+ */
+export async function requireUser() {
+  const { user } = await withAuth({ ensureSignedIn: true });
+  return user;
 }
-
-export async function verifySessionToken(token: string): Promise<boolean> {
-  try {
-    await jwtVerify(token, getSecret(), { algorithms: ["HS256"] });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export const SESSION_COOKIE_NAME = COOKIE_NAME;
-export const SESSION_MAX_AGE_SEC = COOKIE_MAX_AGE_SEC;

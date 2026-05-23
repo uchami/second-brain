@@ -3,17 +3,25 @@ config({ path: ".env.local" });
 
 async function main() {
   const { db } = await import("./client");
-  const { responsables } = await import("./schema");
-  const existing = await db.select().from(responsables);
+  const { responsables, LEGACY_USER_ID } = await import("./schema");
+  const { eq } = await import("drizzle-orm");
+  const userId = process.env.USER_ID ?? LEGACY_USER_ID;
+  const existing = await db
+    .select()
+    .from(responsables)
+    .where(eq(responsables.userId, userId));
   if (existing.length > 0) {
-    console.log("Responsables already seeded:", existing.length);
+    console.log(
+      `Responsables already seeded for user ${userId}:`,
+      existing.length,
+    );
     return;
   }
   await db.insert(responsables).values([
-    { nombre: "Yo (Uri)", color: "#fecaca", orden: 0 },
-    { nombre: "Salus", color: "#ddd6fe", orden: 1 },
+    { userId, nombre: "Yo (Uri)", color: "#fecaca", orden: 0 },
+    { userId, nombre: "Salus", color: "#ddd6fe", orden: 1 },
   ]);
-  console.log("Seeded responsables");
+  console.log(`Seeded responsables for user ${userId}`);
 }
 
 main()

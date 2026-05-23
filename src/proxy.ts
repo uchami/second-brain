@@ -1,37 +1,17 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { verifySessionToken, SESSION_COOKIE_NAME } from "./lib/auth";
+import { authkitProxy } from "@workos-inc/authkit-nextjs";
 
-export async function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  // Public assets and login route
-  const isPublic =
-    pathname === "/login" ||
-    pathname.startsWith("/api/login") ||
-    pathname.startsWith("/manifest") ||
-    pathname.startsWith("/icons") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/sw.js";
-
-  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const isAuthed = token ? await verifySessionToken(token) : false;
-
-  if (!isAuthed && !isPublic) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  if (isAuthed && pathname === "/login") {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
-
-  return NextResponse.next();
-}
+// AuthKit handles auth at the proxy layer: any path not listed in
+// unauthenticatedPaths redirects to the WorkOS hosted sign-in page.
+// /callback is the OAuth return URL and must stay public.
+export default authkitProxy({
+  middlewareAuth: {
+    enabled: true,
+    unauthenticatedPaths: ["/callback"],
+  },
+});
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest|icons|sw\\.js).*)",
+  ],
 };
