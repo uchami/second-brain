@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { and, asc, desc, eq, gt, isNull, ne, sql } from "drizzle-orm";
+import { signOut as authkitSignOut } from "@workos-inc/authkit-nextjs";
 import { db } from "@/db/client";
 import {
   cierresSemana,
@@ -11,6 +13,18 @@ import {
   type Task,
 } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
+
+// ---------- AUTH ----------
+
+export async function signOut() {
+  // Clears the AuthKit session cookie and redirects through WorkOS to also
+  // clear their session. The returnTo URL must be whitelisted in the WorkOS
+  // dashboard (Redirects → Logout redirect URIs).
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  await authkitSignOut({ returnTo: `${proto}://${host}/` });
+}
 
 const IN_FLIGHT_LIMIT = 6;
 

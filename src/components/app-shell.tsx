@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Loader2, Settings, LogOut } from "lucide-react";
+import { Check, Loader2, Settings, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import type { Responsable, Task } from "@/db/schema";
+import { signOut } from "@/app/actions";
 
 // @dnd-kit uses internal counters for aria-describedby that diverge between
 // SSR and CSR, producing hydration warnings. The tabs both rely on D&D, so we
@@ -97,15 +98,35 @@ export function AppShell({
   }, [checkVersion]);
 
   async function logout() {
-    await fetch("/api/logout", { method: "POST" });
-    router.replace("/login");
-    router.refresh();
+    // AuthKit's signOut() throws a NEXT_REDIRECT to the WorkOS logout URL;
+    // the browser follows it and lands back here, where the proxy bounces
+    // unauthenticated requests to the sign-in page.
+    await signOut();
   }
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-4 sm:px-6">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">Second brain</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight">Second brain</h1>
+          {isRefreshing ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+              aria-live="polite"
+            >
+              <Loader2 size={11} className="animate-spin" />
+              Sincronizando
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-950 dark:text-green-300"
+              aria-live="polite"
+            >
+              <Check size={11} />
+              Sincronizado
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <Link href="/settings">
             <Button variant="ghost" size="icon" aria-label="Ajustes">
@@ -144,24 +165,6 @@ export function AppShell({
           <SecondBrainTab tasks={tasks} responsables={responsables} />
         </TabsContent>
       </Tabs>
-
-      {isRefreshing && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-lg dark:bg-neutral-900">
-            <Loader2
-              size={18}
-              className="animate-spin text-neutral-600 dark:text-neutral-300"
-            />
-            <span className="text-sm text-neutral-700 dark:text-neutral-200">
-              Sincronizando…
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
