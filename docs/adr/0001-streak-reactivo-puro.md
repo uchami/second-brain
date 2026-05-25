@@ -1,0 +1,3 @@
+# Streak (racha) se calcula reactivo puro sobre la DB
+
+La racha de días de Journal se calcula leyendo el estado actual de `habito_entries` cada vez que se necesita — no hay tracker dedicado ni snapshot histórico. Consecuencia: **backfill restaura rachas pasadas, edit destructivo puede romper rachas viejas**. Aceptamos esto como honesto y barato: si trackeás un día tarde, sí trackeaste; si borrás una entry vieja, era porque no debía estar. La alternativa ("racha frozen": tracker que avanza solo hacia adelante y no se restaura por backfill) se descartó porque contradice la decisión de no restringir backfill ni edición temporalmente, y agregar un tracker dedicado solo para esto es over-engineering para un dato motivacional.

@@ -7,12 +7,19 @@ import { signOut as authkitSignOut } from "@workos-inc/authkit-nextjs";
 import { db } from "@/db/client";
 import {
   cierresSemana,
+  habitConfig,
+  habitoEntries,
+  habitos,
   responsables,
   tasks,
+  userSettings,
   type Estado,
   type Task,
 } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
+import { computeSleepMode } from "@/lib/sleep-mode";
+import { computeStreak } from "@/lib/streak";
+import { addDays, dateInTZ } from "@/lib/tz-dates";
 
 // ---------- AUTH ----------
 
@@ -35,21 +42,95 @@ function refresh() {
 
 // ---------- READ ----------
 
+async function loadResponsables(userId: string) {
+  return await db
+    .select()
+    .from(responsables)
+    .where(eq(responsables.userId, userId))
+    .orderBy(asc(responsables.orden));
+}
+
 export async function getAllData() {
   const userId = await requireUserId();
-  const [allTasks, allResponsables] = await Promise.all([
-    db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.userId, userId))
-      .orderBy(asc(tasks.bucketOrder)),
-    db
-      .select()
-      .from(responsables)
-      .where(eq(responsables.userId, userId))
-      .orderBy(asc(responsables.orden)),
+  const now = new Date();
+
+  const [allTasks, allResponsables, allHabitos, settingsRow, configRow] =
+    await Promise.all([
+      db
+        .select()
+        .from(tasks)
+        .where(eq(tasks.userId, userId))
+        .orderBy(asc(tasks.bucketOrder)),
+      loadResponsables(userId),
+      db
+        .select()
+        .from(habitos)
+        .where(eq(habitos.userId, userId))
+        .orderBy(asc(habitos.orden)),
+      db
+        .select()
+        .from(userSettings)
+        .where(eq(userSettings.userId, userId))
+        .limit(1),
+      db
+        .select()
+        .from(habitConfig)
+        .where(eq(habitConfig.userId, userId))
+        .limit(1),
+    ]);
+
+  // Garantizar singletons. Si faltan, los creamos on-demand para que el cliente
+  // siempre reciba algo con defaults.
+  let settings = settingsRow[0];
+  if (!settings) {
+    const [created] = await db
+      .insert(userSettings)
+      .values({ userId })
+      .returning();
+    settings = created;
+  }
+  let cfg = configRow[0];
+  if (!cfg) {
+    const [created] = await db
+      .insert(habitConfig)
+      .values({ userId })
+      .returning();
+    cfg = created;
+  }
+
+  const tz = settings.timezone;
+  const hoyISO = dateInTZ(now, tz);
+  // Las últimas 8 semanas (56 días) de entries para alimentar la tab Habits.
+  const desdeISO = addDays(hoyISO, -56);
+
+  const entriesSemana = await db
+    .select()
+    .from(habitoEntries)
+    .where(
+      and(
+        eq(habitoEntries.userId, userId),
+        sql`${habitoEntries.fecha} >= ${desdeISO}`,
+        sql`${habitoEntries.fecha} <= ${hoyISO}`,
+      ),
+    )
+    .orderBy(asc(habitoEntries.fecha));
+
+  const [sleepMode, streak] = await Promise.all([
+    computeSleepMode(userId, now),
+    computeStreak(userId, hoyISO),
   ]);
-  return { tasks: allTasks, responsables: allResponsables };
+
+  return {
+    tasks: allTasks,
+    responsables: allResponsables,
+    habitos: allHabitos,
+    habitoEntriesUltimaSemana: entriesSemana,
+    habitConfig: cfg,
+    userSettings: settings,
+    sleepMode,
+    streak,
+    hoyISO,
+  };
 }
 
 // ---------- CREATE ----------
@@ -270,7 +351,47 @@ export type CerrarSemanaPreview = {
   mvp: { nombre: string; count: number } | null;
   masVieja: { titulo: string; dias: number } | null;
   masRapida: { titulo: string; dias: number } | null;
+  habitMetrics: HabitWeekMetric[];
 };
+
+export type HabitWeekMetric =
+  | {
+      habitoId: number;
+      pregunta: string;
+      tipo: "si_no";
+      cells: ("si" | "no" | "skip" | "empty")[]; // 7 días, cronológico
+      ratioActual: string; // "4/7"
+      ratioAnterior: string | null;
+    }
+  | {
+      habitoId: number;
+      pregunta: string;
+      tipo: "estrellas";
+      promedio: number | null;
+      delta: number | null;
+      count: number;
+    }
+  | {
+      habitoId: number;
+      pregunta: string;
+      tipo: "escala_1_10";
+      promedio: number | null;
+      delta: number | null;
+      count: number;
+    }
+  | {
+      habitoId: number;
+      pregunta: string;
+      tipo: "emocion";
+      top3: { label: string; count: number }[];
+      count: number;
+    }
+  | {
+      habitoId: number;
+      pregunta: string;
+      tipo: "texto";
+      respuestas: { fecha: string; texto: string }[];
+    };
 
 export async function getCerrarSemanaPreview(): Promise<CerrarSemanaPreview> {
   const userId = await requireUserId();
@@ -374,6 +495,8 @@ export async function getCerrarSemanaPreview(): Promise<CerrarSemanaPreview> {
     }
   }
 
+  const habitMetrics = await computeHabitWeekMetrics(userId);
+
   return {
     doneEstaSemana: doneRows.length,
     tareasAgregadas,
@@ -383,7 +506,170 @@ export async function getCerrarSemanaPreview(): Promise<CerrarSemanaPreview> {
     mvp,
     masVieja,
     masRapida,
+    habitMetrics,
   };
+}
+
+async function computeHabitWeekMetrics(
+  userId: string,
+): Promise<HabitWeekMetric[]> {
+  const [settingsRow] = await db
+    .select()
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId))
+    .limit(1);
+  const tz = settingsRow?.timezone ?? "America/Montevideo";
+  const now = new Date();
+  const hoyISO = dateInTZ(now, tz);
+  const semanaInicio = addDays(hoyISO, -6); // últimos 7 días incluyendo hoy
+  const anteriorInicio = addDays(hoyISO, -13);
+  const anteriorFin = addDays(hoyISO, -7);
+
+  const allHabitos = await db
+    .select()
+    .from(habitos)
+    .where(and(eq(habitos.userId, userId), eq(habitos.archivado, false)))
+    .orderBy(asc(habitos.orden));
+
+  if (allHabitos.length === 0) return [];
+
+  const allEntries = await db
+    .select()
+    .from(habitoEntries)
+    .where(
+      and(
+        eq(habitoEntries.userId, userId),
+        sql`${habitoEntries.fecha} >= ${anteriorInicio}`,
+        sql`${habitoEntries.fecha} <= ${hoyISO}`,
+      ),
+    );
+
+  const byHabito = new Map<number, typeof allEntries>();
+  for (const e of allEntries) {
+    const arr = byHabito.get(e.habitoId) ?? [];
+    arr.push(e);
+    byHabito.set(e.habitoId, arr);
+  }
+
+  const out: HabitWeekMetric[] = [];
+  for (const h of allHabitos) {
+    const ents = byHabito.get(h.id) ?? [];
+    const actual = ents.filter(
+      (e) => e.fecha >= semanaInicio && e.fecha <= hoyISO,
+    );
+    const anterior = ents.filter(
+      (e) => e.fecha >= anteriorInicio && e.fecha <= anteriorFin,
+    );
+
+    switch (h.tipo) {
+      case "si_no": {
+        const map = new Map<string, (typeof ents)[number]>();
+        for (const e of actual) map.set(e.fecha, e);
+        const cells: ("si" | "no" | "skip" | "empty")[] = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = addDays(hoyISO, -i);
+          const e = map.get(d);
+          if (!e) cells.push("empty");
+          else if (e.skipped) cells.push("skip");
+          else if (e.valor === "si") cells.push("si");
+          else cells.push("no");
+        }
+        const conValor = actual.filter(
+          (e) => !e.skipped && e.valor !== null,
+        );
+        const ratioActual = `${conValor.filter((e) => e.valor === "si").length}/${conValor.length}`;
+        const antConValor = anterior.filter(
+          (e) => !e.skipped && e.valor !== null,
+        );
+        const ratioAnterior =
+          antConValor.length > 0
+            ? `${antConValor.filter((e) => e.valor === "si").length}/${antConValor.length}`
+            : null;
+        out.push({
+          habitoId: h.id,
+          pregunta: h.pregunta,
+          tipo: "si_no",
+          cells,
+          ratioActual,
+          ratioAnterior,
+        });
+        break;
+      }
+      case "estrellas":
+      case "escala_1_10": {
+        const numActual = actual
+          .filter((e) => !e.skipped && e.valor !== null)
+          .map((e) => parseFloat(e.valor!))
+          .filter((n) => !isNaN(n));
+        const numAnterior = anterior
+          .filter((e) => !e.skipped && e.valor !== null)
+          .map((e) => parseFloat(e.valor!))
+          .filter((n) => !isNaN(n));
+        const promedio =
+          numActual.length === 0
+            ? null
+            : Math.round(
+                (numActual.reduce((a, b) => a + b, 0) / numActual.length) *
+                  10,
+              ) / 10;
+        const promAnterior =
+          numAnterior.length === 0
+            ? null
+            : numAnterior.reduce((a, b) => a + b, 0) / numAnterior.length;
+        const delta =
+          promedio !== null && promAnterior !== null
+            ? Math.round((promedio - promAnterior) * 10) / 10
+            : null;
+        out.push({
+          habitoId: h.id,
+          pregunta: h.pregunta,
+          tipo: h.tipo,
+          promedio,
+          delta,
+          count: numActual.length,
+        });
+        break;
+      }
+      case "emocion": {
+        const counts = new Map<string, number>();
+        for (const e of actual) {
+          if (e.skipped || !e.valor) continue;
+          const label = (() => {
+            const v = e.valor;
+            if (v.startsWith("otro:")) return "Otro";
+            return v;
+          })();
+          counts.set(label, (counts.get(label) ?? 0) + 1);
+        }
+        const top3 = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([label, count]) => ({ label, count }));
+        out.push({
+          habitoId: h.id,
+          pregunta: h.pregunta,
+          tipo: "emocion",
+          top3,
+          count: [...counts.values()].reduce((a, b) => a + b, 0),
+        });
+        break;
+      }
+      case "texto": {
+        const respuestas = actual
+          .filter((e) => !e.skipped && e.valor)
+          .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+          .map((e) => ({ fecha: e.fecha, texto: e.valor! }));
+        out.push({
+          habitoId: h.id,
+          pregunta: h.pregunta,
+          tipo: "texto",
+          respuestas,
+        });
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 export async function cerrarSemana() {

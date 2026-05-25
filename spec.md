@@ -2,11 +2,14 @@
 
 Documento para futuros agentes (humanos o Claude). Explica para qué existe la app, qué decisiones se tomaron y dónde mirar primero.
 
+**Subspecs**:
+- [spec-habits.md](spec-habits.md) — tracking manual de hábitos, modo "A mimir", pantalla de cierre de semana (en diseño, sin código todavía).
+
 ## Objetivo
 
 App personal de Uri para gestionar tareas y prioridades. Reemplaza una planilla Excel que tenía dos vistas: una lista corta de cosas "en vuelo" y una lista larga priorizada por buckets. La app respeta ese flujo y le agrega visibilidad histórica (Logradas), motivación (stats semanales) y disciplina (límite duro de tareas en vuelo, alertas cuando no estás en lo importante).
 
-**Single user**: hay un solo PIN configurado por env var. No hay multitenancy, no hay roles, no hay sharing. Cualquier feature nueva debería respetar este alcance — si pensás que necesita "users" o "permissions", está fuera de scope.
+**Multi-tenant**: cada row de DB lleva `user_id` (text, el id de WorkOS). Toda query debe filtrar por el `user_id` del usuario autenticado. No hay sharing entre usuarios, no hay roles — la app es personal para cada cuenta. Rows pre-WorkOS llevan el placeholder `LEGACY_USER_ID = "legacy-owner"` (ver `src/db/schema.ts`); se migran manualmente al user real después del primer login.
 
 ## Stack
 
@@ -165,10 +168,11 @@ Todos los buckets (incluyendo Done) tienen chevron `▸/▾`. State local a `Sec
 
 ### Auth
 
-- Un solo PIN en `APP_PIN` env var.
-- `POST /api/login` valida y setea cookie `sb_session` firmada con HMAC SHA-256 (`SESSION_SECRET`). Expira a 30 días.
-- `src/proxy.ts` (Next 16 renombró `middleware` → `proxy`) chequea la cookie en cada request. Redirige a `/login` si no está autenticado.
-- `POST /api/logout` borra la cookie.
+- **WorkOS AuthKit** (`@workos-inc/authkit-nextjs`). El login lo hace la hosted UI de WorkOS, no hay form propio.
+- `src/proxy.ts` (Next 16 renombró `middleware` → `proxy`) usa `authkitProxy` para chequear sesión en cada request y redirigir a la hosted sign-in si no hay sesión.
+- `src/lib/auth.ts` expone `getCurrentUserId()` y `getCurrentUser()` que envuelven `withAuth({ ensureSignedIn: true })`. Toda server action y query Drizzle debe partir de un `userId` obtenido por ahí, y filtrar `eq(table.userId, userId)`.
+- Logout vía endpoint provisto por authkit-nextjs.
+- El PIN viejo (`APP_PIN`) y la cookie firmada con `SESSION_SECRET` ya no se usan; quedaron dead code si todavía aparecen en algún lado.
 
 ## UI y componentes
 

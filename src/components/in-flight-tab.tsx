@@ -2,13 +2,20 @@
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, AlertTriangle, Moon, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { TaskCard, type TaskHighlightTier } from "@/components/task-card";
 import { TaskFormDialog } from "@/components/task-form-dialog";
+import {
+  CerrarDiaModal,
+  type CerrarDiaInitialEntry,
+  type CerrarDiaMode,
+} from "@/components/cerrar-dia-modal";
 import { markDone, moveToSecondBrain, unmarkDone } from "@/app/actions";
 import { bucketLabel } from "@/lib/buckets";
-import type { Responsable, Task } from "@/db/schema";
+import type { Habito, HabitoEntry, Responsable, Task } from "@/db/schema";
+import type { SleepMode } from "@/lib/sleep-mode";
 
 const IN_FLIGHT_LIMIT = 6;
 // How long the "¡Logrado!" celebration runs before the server actually
@@ -40,15 +47,49 @@ function applyOptimistic(tasks: Task[], a: OptimisticAction): Task[] {
   return tasks;
 }
 
+export type HabitSavedInfo = {
+  mode: "ritual" | "edit-hoy" | "trackear-otro";
+  fecha: string;
+};
+
 export function InFlightTab({
   tasks,
   responsables,
   existingBuckets,
+  habitos,
+  habitoEntries,
+  sleepMode,
+  streak,
+  hoyISO,
+  onHabitSaved,
+  onExitSleepMode,
 }: {
   tasks: Task[];
   responsables: Responsable[];
   existingBuckets: number[];
+  habitos: Habito[];
+  habitoEntries: HabitoEntry[];
+  sleepMode: SleepMode;
+  streak: number;
+  hoyISO: string;
+  onHabitSaved: (info: HabitSavedInfo) => void;
+  onExitSleepMode: () => void;
 }) {
+  // En modo A mimir reemplazamos toda la tab por una vista mínima focalizada
+  // en el ritual nocturno. Sin tareas, sin "Nueva", sin banner rojo.
+  if (sleepMode.active) {
+    return (
+      <MimirView
+        habitos={habitos}
+        habitoEntries={habitoEntries}
+        sleepMode={sleepMode}
+        streak={streak}
+        hoyISO={hoyISO}
+        onHabitSaved={onHabitSaved}
+        onExitSleepMode={onExitSleepMode}
+      />
+    );
+  }
   const [optimisticTasks, addOptimistic] = useOptimistic(tasks, applyOptimistic);
 
   // Active (non-done) tasks grouped by bucket — used for both the position
@@ -238,6 +279,218 @@ export function InFlightTab({
           mode={{ kind: "edit", task: editing }}
           responsables={responsables}
           existingBuckets={existingBuckets}
+        />
+      )}
+
+      <CerrarDiaSection
+        habitos={habitos}
+        habitoEntries={habitoEntries}
+        sleepMode={sleepMode}
+        streak={streak}
+        hoyISO={hoyISO}
+        onHabitSaved={onHabitSaved}
+      />
+    </div>
+  );
+}
+
+// --- Cerrar día section ---
+
+function CerrarDiaSection({
+  habitos,
+  habitoEntries,
+  sleepMode,
+  streak,
+  hoyISO,
+  onHabitSaved,
+}: {
+  habitos: Habito[];
+  habitoEntries: HabitoEntry[];
+  sleepMode: SleepMode;
+  streak: number;
+  hoyISO: string;
+  onHabitSaved: (info: HabitSavedInfo) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (habitos.length === 0) return null;
+
+  const entriesHoy: CerrarDiaInitialEntry[] = habitoEntries
+    .filter((e) => e.fecha === hoyISO)
+    .map((e) => ({
+      habitoId: e.habitoId,
+      valor: e.valor,
+      skipped: e.skipped,
+    }));
+
+  const hayEntriesHoy = entriesHoy.length > 0;
+  const mode: CerrarDiaMode = hayEntriesHoy ? "edit-hoy" : "ritual";
+
+  // Color destacado si entró el horario sleep y no hay entries (reason='horario').
+  const urgente = sleepMode.reason === "horario";
+
+  // Banner nocturno: solo si reason='horario' (sleep activado por horario sin
+  // entries de hoy). Si reason='cerrado', ya cerraste, no mostramos banner.
+  const showBanner = sleepMode.active && sleepMode.reason === "horario";
+
+  return (
+    <>
+      {showBanner && (
+        <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-3 text-sm text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200">
+          <p className="font-medium">No trackeaste tus hábitos hoy.</p>
+          <p className="mt-0.5 text-xs opacity-80">
+            Hacelo, es un minuto. Recordá: semanas comparables aseguran resultados sostenidos.
+          </p>
+          <Button
+            size="sm"
+            className="mt-2"
+            onClick={() => setOpen(true)}
+          >
+            Trackear ahora
+          </Button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        <Button
+          onClick={() => setOpen(true)}
+          className={cn(
+            "flex-1 h-11 text-base",
+            urgente &&
+              "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700",
+          )}
+        >
+          <Moon size={16} />
+          Cerrar día
+        </Button>
+        <StreakBadge streak={streak} />
+      </div>
+
+      {open && (
+        <CerrarDiaModal
+          open={open}
+          onClose={() => setOpen(false)}
+          mode={mode}
+          fecha={hoyISO}
+          habitos={habitos}
+          entriesIniciales={entriesHoy}
+          onSaved={onHabitSaved}
+        />
+      )}
+    </>
+  );
+}
+
+function StreakBadge({ streak }: { streak: number }) {
+  if (streak === 0) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+        title="Sin racha — cerrá el día para arrancar"
+      >
+        <Flame size={12} />0
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+      title={`Racha actual: ${streak} día${streak === 1 ? "" : "s"}`}
+    >
+      <Flame size={12} />
+      {streak}
+    </span>
+  );
+}
+
+// --- Mimir view (reemplaza la tab cuando sleep mode está activo) ---
+
+function MimirView({
+  habitos,
+  habitoEntries,
+  sleepMode,
+  streak,
+  hoyISO,
+  onHabitSaved,
+  onExitSleepMode,
+}: {
+  habitos: Habito[];
+  habitoEntries: HabitoEntry[];
+  sleepMode: SleepMode;
+  streak: number;
+  hoyISO: string;
+  onHabitSaved: (info: HabitSavedInfo) => void;
+  onExitSleepMode: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const entriesHoy: CerrarDiaInitialEntry[] = habitoEntries
+    .filter((e) => e.fecha === hoyISO)
+    .map((e) => ({
+      habitoId: e.habitoId,
+      valor: e.valor,
+      skipped: e.skipped,
+    }));
+  const hayEntriesHoy = entriesHoy.length > 0;
+  // En sleep mode siempre permitimos editar (no es ritual virgen).
+  const mode: CerrarDiaMode = hayEntriesHoy ? "edit-hoy" : "ritual";
+
+  return (
+    <div className="space-y-4 py-2">
+      <div className="rounded-2xl border border-indigo-300 bg-indigo-50 p-5 text-center dark:border-indigo-800 dark:bg-indigo-950/40">
+        <Moon className="mx-auto text-indigo-500" size={28} />
+        <p className="mt-2 text-base font-semibold text-indigo-900 dark:text-indigo-100">
+          {hayEntriesHoy
+            ? "Cerraste el día. A mimir."
+            : "Hora de cerrar el día."}
+        </p>
+        <p className="mt-1 text-sm text-indigo-800/80 dark:text-indigo-200/80">
+          {hayEntriesHoy
+            ? "Andá a dormir, no seas bobo. Es más productivo dormir bien y hacer eso mañana."
+            : "Trackeá tus hábitos antes de dormir."}
+        </p>
+      </div>
+
+      {sleepMode.reason === "horario" && !hayEntriesHoy && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">No trackeaste tus hábitos hoy.</p>
+          <p className="mt-0.5 text-xs opacity-80">
+            Recordá: semanas comparables aseguran resultados sostenidos.
+          </p>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button
+          onClick={() => setOpen(true)}
+          className="h-11 flex-1 text-base"
+        >
+          <Moon size={16} />
+          {hayEntriesHoy ? "Editar el día" : "Cerrar día"}
+        </Button>
+        <StreakBadge streak={streak} />
+      </div>
+
+      <div className="flex justify-center pt-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onExitSleepMode}
+          className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+        >
+          Salir del modo sueño
+        </Button>
+      </div>
+
+      {open && (
+        <CerrarDiaModal
+          open={open}
+          onClose={() => setOpen(false)}
+          mode={mode}
+          fecha={hoyISO}
+          habitos={habitos}
+          entriesIniciales={entriesHoy}
+          onSaved={onHabitSaved}
         />
       )}
     </div>

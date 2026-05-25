@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   createResponsable,
   updateResponsable,
@@ -27,8 +28,10 @@ const PRESET_COLORS = [
 
 export function ResponsablesEditor({
   initial,
+  embedded = false,
 }: {
   initial: Responsable[];
+  embedded?: boolean;
 }) {
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoColor, setNuevoColor] = useState(PRESET_COLORS[0]);
@@ -48,15 +51,17 @@ export function ResponsablesEditor({
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6">
-      <header className="mb-4 flex items-center gap-2">
-        <Link href="/">
-          <Button variant="ghost" size="icon" aria-label="Volver">
-            <ArrowLeft size={16} />
-          </Button>
-        </Link>
-        <h1 className="text-xl font-bold tracking-tight">Responsables</h1>
-      </header>
+    <div className={cn(!embedded && "mx-auto max-w-2xl px-4 py-4 sm:px-6")}>
+      {!embedded && (
+        <header className="mb-4 flex items-center gap-2">
+          <Link href="/">
+            <Button variant="ghost" size="icon" aria-label="Volver">
+              <ArrowLeft size={16} />
+            </Button>
+          </Link>
+          <h1 className="text-xl font-bold tracking-tight">Responsables</h1>
+        </header>
+      )}
 
       <div className="space-y-4">
         <div className="space-y-2 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
