@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Moon, X } from "lucide-react";
+import { Check, Moon, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { HabitInput } from "@/components/habit-inputs";
@@ -28,8 +28,19 @@ type Props = {
   fecha: string; // ISO YYYY-MM-DD
   habitos: Habito[]; // activos, en el orden definido
   entriesIniciales: CerrarDiaInitialEntry[];
+  // En modo "ritual" controla qué botón aparece como primario. true → "Guardar
+  // y dormir" primario (estamos en sleep window). false → "Guardar" primario
+  // (estamos durante el día). Ignorado fuera de modo ritual. Default: true.
+  defaultSleepIntent?: boolean;
   // Llamado luego de guardar exitoso. El modal cierra por su cuenta antes.
-  onSaved?: (info: { mode: CerrarDiaMode; fecha: string }) => void;
+  // `withSleep` indica si el usuario eligió "Guardar y dormir" (true) o
+  // "Guardar" sin dormir (false). En modos no-ritual, mantiene la semántica
+  // previa: edit-hoy → true (re-activa sleep), trackear-otro → false.
+  onSaved?: (info: {
+    mode: CerrarDiaMode;
+    fecha: string;
+    withSleep: boolean;
+  }) => void;
 };
 
 // "Valor vacío" para emoción: el prefijo "otro:" sin texto cuenta como vacío.
@@ -71,6 +82,7 @@ function CerrarDiaModalInner({
   fecha,
   habitos,
   entriesIniciales,
+  defaultSleepIntent = true,
   onSaved,
 }: Props) {
   // useState initializer: se ejecuta una sola vez al montar. Cambios de props
@@ -80,7 +92,12 @@ function CerrarDiaModalInner({
     buildInitialState(habitos, entriesIniciales),
   );
   const [pending, setPending] = useState(false);
-  const [confirmSkip, setConfirmSkip] = useState<number[] | null>(null);
+  const [confirmSkip, setConfirmSkip] = useState<{
+    ids: number[];
+    withSleep: boolean;
+  } | null>(null);
+  // Recordamos qué botón disparó el save para mantener el spinner sobre él.
+  const [savingWithSleep, setSavingWithSleep] = useState<boolean | null>(null);
 
   function setValue(habitoId: number, v: string | undefined) {
     setState((prev) => {
@@ -90,20 +107,22 @@ function CerrarDiaModalInner({
     });
   }
 
-  async function persist(payload: UpsertEntry[]) {
+  async function persist(payload: UpsertEntry[], withSleep: boolean) {
     setPending(true);
+    setSavingWithSleep(withSleep);
     try {
       await upsertHabitoEntries({ fecha, entries: payload });
-      onSaved?.({ mode, fecha });
+      onSaved?.({ mode, fecha, withSleep });
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setPending(false);
+      setSavingWithSleep(null);
     }
   }
 
-  function handleSave() {
+  function handleSave(withSleep: boolean) {
     // Construir payload. Hábitos sin contestar quedan a parte para confirmación.
     const sinContestar: number[] = [];
     const payload: UpsertEntry[] = [];
@@ -121,19 +140,19 @@ function CerrarDiaModalInner({
       payload.push({ habitoId: h.id, valor: s.value as string });
     }
     if (sinContestar.length > 0) {
-      setConfirmSkip(sinContestar);
+      setConfirmSkip({ ids: sinContestar, withSleep });
       return;
     }
     if (payload.length === 0) {
       toast.error("Nada que guardar");
       return;
     }
-    void persist(payload);
+    void persist(payload, withSleep);
   }
 
   function handleSkipAll() {
     if (!confirmSkip) return;
-    const skipSet = new Set(confirmSkip);
+    const skipSet = new Set(confirmSkip.ids);
     const payload: UpsertEntry[] = [];
     for (const h of habitos) {
       const s = state.get(h.id);
@@ -146,20 +165,27 @@ function CerrarDiaModalInner({
         payload.push({ habitoId: h.id, valor: s.value as string });
       }
     }
+    const withSleep = confirmSkip.withSleep;
     setConfirmSkip(null);
-    void persist(payload);
+    void persist(payload, withSleep);
   }
 
+  // En modo ritual, el título varía según horario: "Cerrar el día" durante
+  // sleep window (ritual nocturno) vs "Registrar hábitos" durante el día.
   const title =
     mode === "ritual"
-      ? "Cerrar el día"
+      ? defaultSleepIntent
+        ? "Cerrar el día"
+        : "Registrar hábitos"
       : mode === "edit-hoy"
         ? "Editar el día"
         : "Trackear día";
 
   const introCopy =
     mode === "ritual"
-      ? "Repasá tu día. Lo que no quieras trackear hoy, dejalo vacío y al final lo skipiamos."
+      ? defaultSleepIntent
+        ? "Repasá tu día. Lo que no quieras trackear hoy, dejalo vacío y al final lo skipiamos."
+        : "Registrá tus hábitos cuando te queden cómodos. Si no querés trackear alguno hoy, dejalo vacío y al final lo skipiamos."
       : mode === "edit-hoy"
         ? "Ajustá lo que necesites. Se sobreescribe sin preguntar."
         : `Registrá tus hábitos para ${fecha}.`;
@@ -228,21 +254,49 @@ function CerrarDiaModalInner({
             </div>
           </div>
 
-          <footer className="flex justify-center border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
-            <Button
-              onClick={handleSave}
-              disabled={pending}
-              className="h-11 w-full text-base sm:max-w-sm"
-            >
-              <Moon size={16} />
-              {mode === "ritual" ? "Guardar y dormir" : "Guardar"}
-            </Button>
+          <footer className="border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95">
+            {mode === "trackear-otro" ? (
+              // Día pasado: sleep no aplica. Un solo botón "Guardar".
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => handleSave(false)}
+                  disabled={pending}
+                  className="h-11 w-full text-base sm:max-w-sm"
+                >
+                  <Check size={16} />
+                  Guardar
+                </Button>
+              </div>
+            ) : (
+              // Hoy (ritual o edit-hoy): SIEMPRE las dos opciones. El usuario
+              // decide si quiere activar/mantener sleep mode al guardar.
+              <div className="mx-auto flex w-full max-w-md flex-col gap-2 sm:flex-row">
+                <Button
+                  onClick={() => handleSave(false)}
+                  disabled={pending}
+                  variant={defaultSleepIntent ? "outline" : "primary"}
+                  className="h-11 flex-1 text-base"
+                >
+                  <Check size={16} />
+                  {savingWithSleep === false ? "Guardando…" : "Guardar"}
+                </Button>
+                <Button
+                  onClick={() => handleSave(true)}
+                  disabled={pending}
+                  variant={defaultSleepIntent ? "primary" : "outline"}
+                  className="h-11 flex-1 text-base"
+                >
+                  <Moon size={16} />
+                  {savingWithSleep === true ? "Guardando…" : "Guardar y dormir"}
+                </Button>
+              </div>
+            )}
           </footer>
         </DialogPrimitive.Content>
 
         {confirmSkip && (
           <ConfirmSkipDialog
-            count={confirmSkip.length}
+            count={confirmSkip.ids.length}
             onCancel={() => setConfirmSkip(null)}
             onSkip={handleSkipAll}
             pending={pending}

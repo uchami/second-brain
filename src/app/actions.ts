@@ -20,6 +20,7 @@ import { requireUserId } from "@/lib/auth";
 import { computeSleepMode } from "@/lib/sleep-mode";
 import { computeStreak } from "@/lib/streak";
 import { addDays, dateInTZ } from "@/lib/tz-dates";
+import { csvParse } from "@/lib/csv";
 
 // ---------- AUTH ----------
 
@@ -153,7 +154,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
   if (input.inFlight) {
     const count = await countInFlight(userId);
     if (count >= IN_FLIGHT_LIMIT) {
-      throw new Error(`Llegaste al máximo de ${IN_FLIGHT_LIMIT} tareas en in-flight`);
+      throw new Error(`Llegaste al máximo de ${IN_FLIGHT_LIMIT} tareas en Foco`);
     }
   }
 
@@ -253,7 +254,7 @@ export async function promoteToInFlight(id: number) {
   const userId = await requireUserId();
   const count = await countInFlight(userId);
   if (count >= IN_FLIGHT_LIMIT) {
-    throw new Error(`Llegaste al máximo de ${IN_FLIGHT_LIMIT} tareas en in-flight`);
+    throw new Error(`Llegaste al máximo de ${IN_FLIGHT_LIMIT} tareas en Foco`);
   }
   const order = await nextInFlightOrder(userId);
   await db
@@ -764,6 +765,103 @@ export async function deleteResponsable(id: number) {
 }
 
 // ---------- HELPERS ----------
+
+// ---------- IMPORT TASKS (CSV) ----------
+
+const IMPORT_TASKS_CAP = 1000;
+
+export type ImportTasksResult = {
+  created: number;
+  // Errores de parsing/validación. No abortan la operación; los rows válidos
+  // se insertan igual. Cada error referencia el número de fila del CSV (1-based,
+  // excluyendo header).
+  errors: Array<{ row: number; message: string }>;
+  // Si superó el cap, ignoramos el resto y avisamos.
+  capExceeded: boolean;
+};
+
+/**
+ * Importa tareas desde un CSV con columnas `titulo` y `descripcion` (opcional).
+ * Todas las tareas se crean en bucket `null` (Sin definir), sin responsable,
+ * sin ETA, fuera del Foco. Append-only: no hace dedupe ni upsert.
+ *
+ * Reglas:
+ * - Cap: hasta 1000 filas. Si hay más, se ignoran las extras y se reporta.
+ * - Fila válida: `titulo` no vacío después de trim. `descripcion` opcional.
+ * - Filas inválidas se reportan en `errors` y NO bloquean al resto.
+ */
+export async function importTasksFromCsv(
+  csvText: string,
+): Promise<ImportTasksResult> {
+  const userId = await requireUserId();
+  const rows = csvParse(csvText);
+  if (rows.length === 0) {
+    return { created: 0, errors: [], capExceeded: false };
+  }
+
+  // Header: aceptamos cualquier orden mientras existan las columnas que
+  // necesitamos. Normalizamos los nombres a lowercase trim.
+  const headers = rows[0].map((h) => h.toLowerCase().trim());
+  const tituloIdx = headers.indexOf("titulo");
+  const descripcionIdx = (() => {
+    const a = headers.indexOf("descripcion");
+    if (a >= 0) return a;
+    return headers.indexOf("detalle");
+  })();
+  if (tituloIdx < 0) {
+    throw new Error(
+      "El CSV debe tener una columna 'titulo'. Encontrado: " +
+        headers.join(", "),
+    );
+  }
+
+  const dataRows = rows.slice(1);
+  const capExceeded = dataRows.length > IMPORT_TASKS_CAP;
+  const toProcess = capExceeded
+    ? dataRows.slice(0, IMPORT_TASKS_CAP)
+    : dataRows;
+
+  const errors: Array<{ row: number; message: string }> = [];
+  const validInputs: Array<{ titulo: string; detalle: string | null }> = [];
+  toProcess.forEach((row, idx) => {
+    const rowNum = idx + 1; // human-readable: fila 1 = primera fila de datos
+    const titulo = (row[tituloIdx] ?? "").trim();
+    if (!titulo) {
+      errors.push({ row: rowNum, message: "Título vacío" });
+      return;
+    }
+    const detalle =
+      descripcionIdx >= 0
+        ? (row[descripcionIdx] ?? "").trim() || null
+        : null;
+    validInputs.push({ titulo, detalle });
+  });
+
+  if (validInputs.length === 0) {
+    return { created: 0, errors, capExceeded };
+  }
+
+  // Insertamos en batch. Calculamos bucketOrder de a uno para no chocar — el
+  // bucket es `null` ("Sin definir") y queremos que las nuevas queden al final.
+  let nextOrder = await nextBucketOrder(userId, null);
+  const valuesToInsert = validInputs.map((v) => {
+    const row = {
+      userId,
+      titulo: v.titulo,
+      detalle: v.detalle,
+      bucket: null as number | null,
+      estado: "pendiente" as const,
+      inFlight: false,
+      bucketOrder: nextOrder,
+    };
+    nextOrder += 100;
+    return row;
+  });
+
+  await db.insert(tasks).values(valuesToInsert);
+  refresh();
+  return { created: valuesToInsert.length, errors, capExceeded };
+}
 
 async function countInFlight(userId: string): Promise<number> {
   const [row] = await db

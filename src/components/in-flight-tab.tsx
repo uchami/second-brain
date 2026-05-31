@@ -2,7 +2,7 @@
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, AlertTriangle, Moon, Flame } from "lucide-react";
+import { Plus, AlertTriangle, Check, Moon, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TaskCard, type TaskHighlightTier } from "@/components/task-card";
@@ -50,6 +50,9 @@ function applyOptimistic(tasks: Task[], a: OptimisticAction): Task[] {
 export type HabitSavedInfo = {
   mode: "ritual" | "edit-hoy" | "trackear-otro";
   fecha: string;
+  // true → el usuario eligió "Guardar y dormir" (o equivalente en otro modo).
+  // false → guardar sin tocar sleep mode.
+  withSleep: boolean;
 };
 
 export function InFlightTab({
@@ -226,9 +229,22 @@ export function InFlightTab({
       </div>
 
       {inFlight.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          Sin tareas en vuelo. Toca "+ Nueva" para arrancar.
-        </p>
+        <div className="space-y-3 rounded-xl border border-dashed border-neutral-300 p-6 text-sm text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+          <p>
+            La tab de foco es tu espacio sagrado. Es de todo lo que vive en el
+            second brain lo que ponés en progreso. Si trabajás solo/a quizás
+            una sola cosa en progreso a la vez es suficiente, si delegás,
+            tenés que poder gestionar múltiples tareas en progreso al mismo
+            tiempo.
+          </p>
+          <p>
+            Lo que ponés en foco es lo que estás haciendo ahora mismo. Esta
+            tab debería acompañarte durante tu jornada.
+          </p>
+          <p className="italic text-neutral-500 dark:text-neutral-500">
+            Máximo 6 tareas en foco a la vez — próximamente configurable.
+          </p>
+        </div>
       ) : (
         <div className="space-y-2">
           {inFlight.map((task) => (
@@ -360,8 +376,17 @@ function CerrarDiaSection({
               "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-700",
           )}
         >
-          <Moon size={16} />
-          Cerrar día
+          {sleepMode.active ? (
+            <>
+              <Moon size={16} />
+              Cerrar día
+            </>
+          ) : (
+            <>
+              <Check size={16} />
+              Registrar hábitos
+            </>
+          )}
         </Button>
         <StreakBadge streak={streak} />
       </div>
@@ -374,6 +399,7 @@ function CerrarDiaSection({
           fecha={hoyISO}
           habitos={habitos}
           entriesIniciales={entriesHoy}
+          defaultSleepIntent={sleepMode.active}
           onSaved={onHabitSaved}
         />
       )}
@@ -490,6 +516,7 @@ function MimirView({
           fecha={hoyISO}
           habitos={habitos}
           entriesIniciales={entriesHoy}
+          defaultSleepIntent={sleepMode.active}
           onSaved={onHabitSaved}
         />
       )}

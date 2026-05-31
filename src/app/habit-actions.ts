@@ -138,6 +138,7 @@ export type UpdateHabitConfigInput = {
   sleepModeInicio?: string; // "HH:MM" or "HH:MM:SS"
   sleepModeFin?: string;
   sleepModeAuto?: boolean;
+  reminderTime?: string; // "HH:MM" or "HH:MM:SS"
 };
 
 export async function updateHabitConfig(
@@ -151,6 +152,7 @@ export async function updateHabitConfig(
   if (input.sleepModeInicio !== undefined) set.sleepModeInicio = input.sleepModeInicio;
   if (input.sleepModeFin !== undefined) set.sleepModeFin = input.sleepModeFin;
   if (input.sleepModeAuto !== undefined) set.sleepModeAuto = input.sleepModeAuto;
+  if (input.reminderTime !== undefined) set.reminderTime = input.reminderTime;
   const [updated] = await db
     .update(habitConfig)
     .set(set)
@@ -196,6 +198,48 @@ export async function updateUserSettings(
     .returning();
   refresh();
   return updated;
+}
+
+// ---------- ICAL TOKEN ----------
+
+function randomToken(): string {
+  // 32 hex chars (~128 bits). Suficiente entropía contra fuerza bruta.
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Devuelve el token actual del usuario, o genera uno si no existe.
+ * Idempotente — segundo llamado devuelve el mismo token.
+ */
+export async function getOrCreateIcalToken(): Promise<string> {
+  const userId = await requireUserId();
+  const settings = await getOrCreateUserSettings();
+  if (settings.icalToken) return settings.icalToken;
+  const token = randomToken();
+  await db
+    .update(userSettings)
+    .set({ icalToken: token, updatedAt: new Date() })
+    .where(eq(userSettings.userId, userId));
+  refresh();
+  return token;
+}
+
+/**
+ * Regenera el token. Invalida el URL anterior — quien lo tenía suscripto
+ * empieza a recibir 404 hasta resuscribirse con el nuevo.
+ */
+export async function regenerateIcalToken(): Promise<string> {
+  const userId = await requireUserId();
+  await getOrCreateUserSettings();
+  const token = randomToken();
+  await db
+    .update(userSettings)
+    .set({ icalToken: token, updatedAt: new Date() })
+    .where(eq(userSettings.userId, userId));
+  refresh();
+  return token;
 }
 
 // ---------- ENTRIES UPSERT ----------

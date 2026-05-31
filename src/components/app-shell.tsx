@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Check, Loader2, Settings, LogOut, Moon } from "lucide-react";
+import { Brain, Check, Loader2, Repeat, Settings, LogOut, Moon } from "lucide-react";
+import { FocoIcon } from "@/components/icons/foco-icon";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -222,30 +223,35 @@ export function AppShell(props: AppShellProps) {
   }
 
   // Centralizado: cualquier modal de hábitos llama acá al guardar exitoso.
-  // Decide animación, sleep optimistic y dismiss según mode + fecha.
+  // Decide animación, sleep optimistic y dismiss según mode + fecha + intent.
+  // `withSleep` viene del botón que el usuario apretó en el modal:
+  //   true  → quiere cerrar el día y dormir (ritual nocturno).
+  //   false → quiere persistir sin tocar el sleep mode (tracking diurno).
   function handleHabitSave({
     mode,
     fecha,
+    withSleep,
   }: {
     mode: "ritual" | "edit-hoy" | "trackear-otro";
     fecha: string;
+    withSleep: boolean;
   }) {
     const esHoy = fecha === hoyISO;
-    if (mode === "ritual" && esHoy) {
+    if (mode === "ritual" && esHoy && withSleep) {
       // Ritual nocturno: animación completa + sleep + reset dismiss.
       startRitualAnimation(fecha);
       return;
     }
-    if (esHoy) {
-      // Edit-hoy (o trackear-otro apuntando a hoy): si el usuario había
-      // salido de A mimir manualmente, lo re-activamos — el día sigue cerrado.
-      // Sin animación, solo toast.
+    if (esHoy && withSleep) {
+      // Edit-hoy con intent de dormir: re-activamos sleep optimistic
+      // (caso típico: el usuario había salido de A mimir y vuelve a cerrar).
       clearDismissOnRitual();
       activateSleepOptimistic();
       toast.success("Guardado");
       return;
     }
-    // Días pasados: no toca sleep mode.
+    // Resto: tracking diurno (mode=ritual sin sleep), trackear-otro o pasados.
+    // No tocamos sleep mode.
     toast.success("Guardado");
   }
 
@@ -278,7 +284,7 @@ export function AppShell(props: AppShellProps) {
     setTab(next);
   }
 
-  const inflightLabel = effectiveSleep.active ? "Modo sueño" : "In-flight";
+  const inflightLabel = effectiveSleep.active ? "Modo sueño" : "Foco";
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col px-4 py-4 sm:px-6">
@@ -328,11 +334,17 @@ export function AppShell(props: AppShellProps) {
       >
         <TabsList className="w-full">
           <TabsTrigger value="inflight" className="flex items-center gap-1.5">
-            {effectiveSleep.active && <Moon size={13} />}
+            {effectiveSleep.active ? <Moon size={13} /> : <FocoIcon size={13} />}
             {inflightLabel}
           </TabsTrigger>
-          <TabsTrigger value="habits">Habits</TabsTrigger>
-          <TabsTrigger value="sb">Second brain</TabsTrigger>
+          <TabsTrigger value="habits" className="flex items-center gap-1.5">
+            <Repeat size={13} />
+            Habits
+          </TabsTrigger>
+          <TabsTrigger value="sb" className="flex items-center gap-1.5">
+            <Brain size={13} />
+            Second brain
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="inflight">
           <InFlightTab
@@ -354,6 +366,7 @@ export function AppShell(props: AppShellProps) {
             habitoEntries={habitoEntries}
             streak={streak}
             hoyISO={hoyISO}
+            sleepMode={effectiveSleep}
             celebrateFecha={ritualAnimating}
             onHabitSaved={handleHabitSave}
           />

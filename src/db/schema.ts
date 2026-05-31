@@ -148,6 +148,9 @@ export const habitConfig = pgTable(
     sleepModeInicio: time("sleep_mode_inicio").notNull().default("21:00"),
     sleepModeFin: time("sleep_mode_fin").notNull().default("05:00"),
     sleepModeAuto: boolean("sleep_mode_auto").notNull().default(true),
+    // Hora global del reminder diario de hábitos en el ICS feed. Single setting
+    // por usuario — todos los hábitos suenan a la misma hora.
+    reminderTime: time("reminder_time").notNull().default("09:00"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -161,6 +164,9 @@ export const userSettings = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
     timezone: text("timezone").notNull().default("America/Montevideo"),
+    // Token random para el URL del calendar feed. Generado on-demand cuando
+    // el usuario pide la URL por primera vez (o la regenera).
+    icalToken: text("ical_token"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

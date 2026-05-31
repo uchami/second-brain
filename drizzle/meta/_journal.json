@@ -36,6 +36,13 @@
       "when": 1779712640576,
       "tag": "0004_aspiring_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780201291916,
+      "tag": "0005_small_power_man",
+      "breakpoints": true
     }
   ]
 }

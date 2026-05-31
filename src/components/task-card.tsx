@@ -4,14 +4,13 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import {
   Send,
-  Plane,
   GripVertical,
-  Rocket,
   StickyNote,
   Trophy,
   FolderInput,
   PartyPopper,
 } from "lucide-react";
+import { FocoIcon } from "@/components/icons/foco-icon";
 import { cn } from "@/lib/utils";
 import { etaColor, formatEtaShort } from "@/lib/eta";
 import { daysBetween, formatDaysInList } from "@/lib/dates";
@@ -121,7 +120,7 @@ export function TaskCard({
     startTransition(async () => {
       try {
         await promoteToInFlight(task.id);
-        toast.success("Tarea promovida a in-flight");
+        toast.success("Tarea promovida a Foco");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error");
       }
@@ -229,7 +228,7 @@ export function TaskCard({
           )}
           {context === "second-brain" && task.inFlight && !isDone && (
             <span className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
-              <Rocket size={10} /> en in-flight
+              <FocoIcon size={10} /> en Foco
             </span>
           )}
           {isLograda && task.doneAt && task.createdAt && (
@@ -275,10 +274,10 @@ export function TaskCard({
             size="icon"
             onClick={handlePromote}
             disabled={pending}
-            aria-label="Promover a in-flight"
-            title="Promover a in-flight"
+            aria-label="Promover a Foco"
+            title="Promover a Foco"
           >
-            <Plane size={16} />
+            <FocoIcon size={16} />
           </Button>
         )}
       </div>

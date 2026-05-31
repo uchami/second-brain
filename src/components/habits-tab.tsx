@@ -2,8 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Flame, Pencil, Plus } from "lucide-react";
-import { toast } from "sonner";
+import {
+  BarChart3,
+  ChevronDown,
+  ChevronRight,
+  Flame,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +22,7 @@ import { addDays, startOfWeekMonday } from "@/lib/tz-dates";
 import { displayEmocion } from "@/lib/emociones";
 import { formatDateLong } from "@/lib/dates";
 import type { Habito, HabitoEntry, HabitoTipo } from "@/db/schema";
+import type { SleepMode } from "@/lib/sleep-mode";
 
 const MES_CORTO = [
   "ene",
@@ -51,6 +58,7 @@ export function HabitsTab({
   habitoEntries,
   streak,
   hoyISO,
+  sleepMode,
   celebrateFecha,
   onHabitSaved,
 }: {
@@ -58,10 +66,12 @@ export function HabitsTab({
   habitoEntries: HabitoEntry[];
   streak: number;
   hoyISO: string;
+  sleepMode: SleepMode;
   celebrateFecha?: string | null;
   onHabitSaved: (info: {
     mode: "ritual" | "edit-hoy" | "trackear-otro";
     fecha: string;
+    withSleep: boolean;
   }) => void;
 }) {
   const activos = useMemo(() => habitos.filter((h) => !h.archivado), [habitos]);
@@ -146,9 +156,16 @@ export function HabitsTab({
               </span>
             </div>
           </div>
-          <Button onClick={() => setCalendarOpen(true)} size="sm">
-            <Plus size={14} /> Trackear hábito
-          </Button>
+          <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <Link href="/insights">
+              <Button variant="ghost" size="sm">
+                <BarChart3 size={14} /> Métricas
+              </Button>
+            </Link>
+            <Button onClick={() => setCalendarOpen(true)} size="sm">
+              <Plus size={14} /> Registrar hábitos
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -203,6 +220,7 @@ export function HabitsTab({
           fecha={modal.fecha}
           habitos={activos}
           entriesIniciales={modal.entries}
+          defaultSleepIntent={modal.fecha === hoyISO && sleepMode.active}
           onSaved={onHabitSaved}
         />
       )}

@@ -8,6 +8,7 @@ import { ResponsablesEditor } from "@/components/responsables-editor";
 import { HabitsEditor } from "@/components/habits-editor";
 import { SleepModeConfig } from "@/components/sleep-mode-config";
 import { CuentaSettings } from "@/components/cuenta-settings";
+import { DatosSettings } from "@/components/datos-settings";
 import type {
   HabitConfig,
   Habito,
@@ -42,6 +43,7 @@ export function SettingsShell({
           <TabsTrigger value="habitos">Hábitos</TabsTrigger>
           <TabsTrigger value="mimir">Modo sueño</TabsTrigger>
           <TabsTrigger value="responsables">Responsables</TabsTrigger>
+          <TabsTrigger value="datos">Datos</TabsTrigger>
           <TabsTrigger value="cuenta">Cuenta</TabsTrigger>
         </TabsList>
 
@@ -53,6 +55,9 @@ export function SettingsShell({
         </TabsContent>
         <TabsContent value="responsables">
           <ResponsablesEditor initial={responsables} embedded />
+        </TabsContent>
+        <TabsContent value="datos">
+          <DatosSettings habitConfig={habitConfig} userSettings={userSettings} />
         </TabsContent>
         <TabsContent value="cuenta">
           <CuentaSettings initial={userSettings} />

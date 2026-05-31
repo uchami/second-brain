@@ -6,7 +6,11 @@ import { authkitProxy } from "@workos-inc/authkit-nextjs";
 export default authkitProxy({
   middlewareAuth: {
     enabled: true,
-    unauthenticatedPaths: ["/callback"],
+    // /callback — OAuth return URL
+    // /api/ical/.* — calendar feed con su propio token (autenticación por URL),
+    //                tiene que ser accesible sin sesión WorkOS para que
+    //                Google/Apple Calendar puedan polearlo.
+    unauthenticatedPaths: ["/callback", "/api/ical/:path*"],
   },
 });
 
