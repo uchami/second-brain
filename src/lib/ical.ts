@@ -13,9 +13,13 @@ export type IcalInput = {
   reminderTime: string;
   // Timezone del usuario (IANA). Usado para todos los DTSTART/DTEND locales.
   tz: string;
+  // URL de la app — aparece en la descripción del reminder de hábitos como
+  // shortcut clickeable para abrir el modal y registrar.
+  appUrl: string;
   // Tareas con ETA no done → evento all-day el día del ETA.
   tasks: Task[];
-  // Hábitos activos → recurrencia diaria a reminderTime.
+  // Hábitos activos → cantidad usada solo para decidir si emitimos el
+  // reminder (si no hay hábitos activos, no hay nada que registrar).
   habitos: Habito[];
 };
 
@@ -108,34 +112,34 @@ export function buildIcal(input: IcalInput): string {
     );
   }
 
-  // -------- Hábitos: recurrente diaria --------
-  if (input.habitos.length > 0) {
+  // -------- Hábitos: UN solo reminder recurrente diario --------
+  // No emitimos un evento por hábito (saturaba el calendar y dificultaba
+  // dismiss). Un solo "Registrar hábitos" diario alcanza — el usuario abre
+  // la app y registra todo lo que tiene activo. La descripción tiene la URL
+  // como shortcut clickeable desde el calendar event.
+  const activos = input.habitos.filter((h) => !h.archivado);
+  if (activos.length > 0) {
     const time = timeToIcs(input.reminderTime);
-    // Usamos hoy como anchor; RRULE FREQ=DAILY desde acá.
     const today = nowStamp().slice(0, 8);
-    for (const h of input.habitos) {
-      if (h.archivado) continue;
-      const uid = `habito-${h.id}@${input.feedId}`;
-      const summary = `🧠 ${h.pregunta}`;
-      // DTSTART local — sin UTC. El calendar respeta la hora local del usuario.
-      // No emitimos VTIMEZONE: usamos TZID para mantener simpleza y dejar que
-      // el calendar resuelva (Apple Calendar y Google Calendar lo aceptan).
-      lines.push(
-        "BEGIN:VEVENT",
-        `UID:${uid}`,
-        `DTSTAMP:${dtstamp}`,
-        `DTSTART;TZID=${input.tz}:${today}T${time}`,
-        `DTEND;TZID=${input.tz}:${today}T${addMinutes(time, 15)}`,
-        "RRULE:FREQ=DAILY",
-        `SUMMARY:${escapeText(summary)}`,
-        "BEGIN:VALARM",
-        "ACTION:DISPLAY",
-        "TRIGGER:-PT0M",
-        `DESCRIPTION:${escapeText(summary)}`,
-        "END:VALARM",
-        "END:VEVENT",
-      );
-    }
+    const summary = "🧠 Registrar hábitos";
+    const description = `Abrí el second brain para registrar tus hábitos de hoy:\n${input.appUrl}`;
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:habitos-daily@${input.feedId}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART;TZID=${input.tz}:${today}T${time}`,
+      `DTEND;TZID=${input.tz}:${today}T${addMinutes(time, 15)}`,
+      "RRULE:FREQ=DAILY",
+      `SUMMARY:${escapeText(summary)}`,
+      `DESCRIPTION:${escapeText(description)}`,
+      `URL:${input.appUrl}`,
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      "TRIGGER:-PT0M",
+      `DESCRIPTION:${escapeText(summary)}`,
+      "END:VALARM",
+      "END:VEVENT",
+    );
   }
 
   lines.push("END:VCALENDAR");

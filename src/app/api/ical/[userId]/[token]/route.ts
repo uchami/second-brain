@@ -3,6 +3,7 @@
 // una vez en Google/Apple Calendar y se actualiza solo por polling.
 
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
@@ -12,6 +13,20 @@ import {
   userSettings,
 } from "@/db/schema";
 import { buildIcal } from "@/lib/ical";
+
+// URL pública de la app — usada en la descripción del reminder de hábitos
+// para que sea un shortcut clickeable. Se intenta tomar del request host;
+// si por alguna razón viene un host privado/raro, cae al fallback prod.
+const PROD_FALLBACK = "https://second-brain-uri.vercel.app";
+
+function resolveAppUrl(host: string | null): string {
+  if (!host) return PROD_FALLBACK;
+  // Si es localhost, usamos http; para todo lo demás, https.
+  const proto = host.startsWith("localhost") || host.startsWith("127.0.0.1")
+    ? "http"
+    : "https";
+  return `${proto}://${host}`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -57,11 +72,15 @@ export async function GET(
     db.select().from(tasks).where(eq(tasks.userId, userId)),
   ]);
 
+  const h = await headers();
+  const appUrl = resolveAppUrl(h.get("host"));
+
   const ical = buildIcal({
     feedId: userId.slice(0, 8) || "user",
     feedName: "Second brain — Reminders",
     reminderTime: cfgRow?.reminderTime ?? "09:00",
     tz: settingsRow.timezone,
+    appUrl,
     tasks: allTasksWithEta,
     habitos: allHabitos,
   });
