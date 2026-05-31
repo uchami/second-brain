@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, Search, X } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -23,6 +23,7 @@ import { TaskFormDialog } from "@/components/task-form-dialog";
 import { QuickBucketDialog } from "@/components/quick-bucket-dialog";
 import { CerrarSemanaDialog } from "@/components/cerrar-semana-dialog";
 import { bucketLabel } from "@/lib/buckets";
+import { normalizeForSearch } from "@/lib/utils";
 
 const PERMANENT_BUCKETS = [0, 1, 2, 3];
 const CELEBRATION_MS = 1600;
@@ -101,6 +102,7 @@ export function SecondBrainTab({
   );
 
   const [showLogradas, setShowLogradas] = useState(false);
+  const [query, setQuery] = useState("");
   const [collapsedBuckets, setCollapsedBuckets] = useState<
     Record<string, boolean>
   >({});
@@ -128,15 +130,29 @@ export function SecondBrainTab({
   }, []);
   const [, startTransition] = useTransition();
 
+  // Filtro de búsqueda: matchea LIKE %query% sobre titulo + detalle, case
+  // insensitive y con tildes normalizadas. Si query vacío, no filtra.
+  const filteredTasks = useMemo(() => {
+    const q = normalizeForSearch(query.trim());
+    if (!q) return optimisticTasks;
+    return optimisticTasks.filter((t) => {
+      const hayTitulo = normalizeForSearch(t.titulo).includes(q);
+      const hayDetalle = t.detalle
+        ? normalizeForSearch(t.detalle).includes(q)
+        : false;
+      return hayTitulo || hayDetalle;
+    });
+  }, [optimisticTasks, query]);
+
   // Group tasks into buckets/done/logradas.
   // Tasks currently celebrating stay in their source bucket even though their
   // optimistic estado is "done" — that way the stamp/confetti animate in place
   // instead of teleporting the card to the Done section out of view.
   const grouped = useMemo(() => {
-    const active = optimisticTasks.filter(
+    const active = filteredTasks.filter(
       (t) => t.estado !== "done" || celebratingIds.has(t.id),
     );
-    const done = optimisticTasks
+    const done = filteredTasks
       .filter(
         (t) =>
           t.estado === "done" &&
@@ -147,7 +163,7 @@ export function SecondBrainTab({
         (a, b) =>
           (b.doneAt?.getTime() ?? 0) - (a.doneAt?.getTime() ?? 0),
       );
-    const logradas = optimisticTasks
+    const logradas = filteredTasks
       .filter((t) => t.estado === "done" && t.closedWeekAt !== null)
       .sort(
         (a, b) =>
@@ -173,9 +189,18 @@ export function SecondBrainTab({
       .sort((a, b) => a - b);
 
     return { bucketMap, bucketNumbers, done, logradas };
-  }, [optimisticTasks]);
+  }, [filteredTasks, celebratingIds]);
 
   const existingBuckets = grouped.bucketNumbers;
+
+  // Cuántas tareas hay activas (no done) marcadas como in-flight. Si está al
+  // cap, deshabilitamos el botón "Promover a Foco" en las task cards para
+  // no llamar al server y evitar el error overlay feo.
+  const FOCO_LIMIT = 6;
+  const inFocoCount = optimisticTasks.filter(
+    (t) => t.inFlight && t.estado !== "done",
+  ).length;
+  const focoLimitReached = inFocoCount >= FOCO_LIMIT;
 
   // Build ordered sections
   type Section =
@@ -361,7 +386,34 @@ export function SecondBrainTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400"
+            aria-hidden
+          />
+          <input
+            // type="text" en lugar de "search" para evitar el botón X nativo
+            // del browser, que duplicaría nuestro botón custom de limpiar.
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar tareas…"
+            className="h-9 w-full rounded-lg border border-neutral-200 bg-white pl-8 pr-8 text-sm placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none dark:border-neutral-800 dark:bg-neutral-900 dark:placeholder:text-neutral-600"
+            aria-label="Buscar tareas"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              aria-label="Limpiar búsqueda"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <Button
           size="sm"
           variant="outline"
@@ -420,6 +472,7 @@ export function SecondBrainTab({
                   collapsible
                   collapsed={collapsed}
                   onToggleCollapse={() => toggleBucket(s.key)}
+                  focoLimitReached={focoLimitReached}
                 />
               );
             }

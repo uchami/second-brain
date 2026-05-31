@@ -33,6 +33,7 @@ export function SBBucket({
   collapsed,
   onToggleCollapse,
   highlight,
+  focoLimitReached,
 }: {
   id: string;
   title: string;
@@ -52,6 +53,7 @@ export function SBBucket({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   highlight?: boolean;
+  focoLimitReached?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const itemTasks = taskIds
@@ -187,6 +189,7 @@ export function SBBucket({
                         : undefined
                     }
                     celebrating={celebratingIds?.has(task.id)}
+                    focoLimitReached={focoLimitReached}
                   />
                 );
               })

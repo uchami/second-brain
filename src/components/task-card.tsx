@@ -74,6 +74,7 @@ export function TaskCard({
   onToggleDone,
   celebrating,
   showReorder,
+  focoLimitReached,
   // drag handle attributes (from @dnd-kit sortable)
   dragHandleProps,
   isDragging,
@@ -91,6 +92,10 @@ export function TaskCard({
   onToggleDone?: (next: boolean) => void;
   celebrating?: boolean;
   showReorder?: boolean;
+  // Cuando el padre detecta que ya hay 6 tareas en Foco, pasa true para que
+  // el botón "Promover a Foco" muestre un toast amistoso en lugar de llamar
+  // al server (que tiraría error 500 / overlay feo).
+  focoLimitReached?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
   isDragging?: boolean;
 }) {
@@ -117,6 +122,10 @@ export function TaskCard({
   }
 
   function handlePromote() {
+    if (focoLimitReached) {
+      toast.error("Llegaste al máximo de 6 tareas en Foco. Sacá una primero.");
+      return;
+    }
     startTransition(async () => {
       try {
         await promoteToInFlight(task.id);
@@ -274,8 +283,17 @@ export function TaskCard({
             size="icon"
             onClick={handlePromote}
             disabled={pending}
-            aria-label="Promover a Foco"
-            title="Promover a Foco"
+            aria-label={
+              focoLimitReached
+                ? "Foco lleno (6/6)"
+                : "Promover a Foco"
+            }
+            title={
+              focoLimitReached
+                ? "Foco lleno (6/6) — sacá una primero"
+                : "Promover a Foco"
+            }
+            className={cn(focoLimitReached && "opacity-40")}
           >
             <FocoIcon size={16} />
           </Button>

@@ -15,6 +15,7 @@ type Props = {
   onChangeBucket?: () => void;
   onToggleDone?: (next: boolean) => void;
   celebrating?: boolean;
+  focoLimitReached?: boolean;
 };
 
 export function SortableTask({
@@ -27,6 +28,7 @@ export function SortableTask({
   onChangeBucket,
   onToggleDone,
   celebrating,
+  focoLimitReached,
 }: Props) {
   const {
     attributes,
@@ -54,6 +56,7 @@ export function SortableTask({
         onChangeBucket={onChangeBucket}
         onToggleDone={onToggleDone}
         celebrating={celebrating}
+        focoLimitReached={focoLimitReached}
         showReorder
         dragHandleProps={{ ...attributes, ...listeners } as React.HTMLAttributes<HTMLButtonElement>}
         isDragging={isDragging}
